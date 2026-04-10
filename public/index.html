@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Morning Mirror</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <p class="eyebrow">Voice-first LLM check-in</p>
+        <h1>Morning Mirror</h1>
+        <p class="intro">
+          A chat agent that starts by asking how your morning is going, then
+          listens to a voice recording and keeps the conversation moving.
+        </p>
+      </section>
+
+      <section class="panel">
+        <div class="chat-header">
+          <div>
+            <p class="label">Conversation</p>
+            <h2>Daily morning check-in</h2>
+          </div>
+          <button id="startChatButton" class="secondary-button" type="button" disabled>
+            Start chat
+          </button>
+        </div>
+
+        <div id="chatLog" class="chat-log" aria-live="polite"></div>
+
+        <div class="composer">
+          <div class="controls">
+            <button id="recordButton" class="primary-button" type="button" disabled>
+              Record response
+            </button>
+            <button id="sendButton" class="secondary-button" type="button" disabled>
+              Send recording
+            </button>
+          </div>
+          <p id="statusText" class="status">
+            Press Start chat to let the agent ask the first question.
+          </p>
+          <audio id="playback" class="playback" controls hidden></audio>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
