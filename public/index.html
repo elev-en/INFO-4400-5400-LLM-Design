@@ -3,55 +3,155 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Morning Mirror</title>
+    <title>Morning Reflection</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;600&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Noto+Serif:ital,wght@0,400;0,500;0,600;1,400&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Inter:wght@400&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <main class="shell">
-      <section class="hero">
-        <p class="eyebrow">Voice-first LLM check-in</p>
-        <h1>Morning Mirror</h1>
-        <p class="intro">
-          A chat agent that starts by asking how your morning is going, then
-          listens to a voice recording and keeps the conversation moving.
-        </p>
-      </section>
 
-      <section class="panel">
-        <div class="chat-header">
-          <div>
-            <p class="label">Conversation</p>
-            <h2>Daily morning check-in</h2>
+    <!-- ═══════════════════════════════════════════
+         SCREEN 1 — Welcome / Login
+    ═══════════════════════════════════════════ -->
+    <div id="screen-welcome" class="screen screen-welcome">
+      <div class="welcome-blob welcome-blob--orange"></div>
+      <div class="welcome-blob welcome-blob--blue"></div>
+
+      <header class="welcome-header">
+        <span id="dayLabel" class="day-label">Day 1</span>
+        <button id="switchAccountBtn" class="link-btn" hidden>Switch account</button>
+      </header>
+
+      <main class="welcome-main">
+        <div class="welcome-hero">
+          <div class="logo-circle">
+            <svg width="33" height="33" viewBox="0 0 24 24" fill="none" stroke="#E8956D" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="4"/>
+              <line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/>
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+              <line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/>
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+            </svg>
           </div>
-          <button id="startChatButton" class="secondary-button" type="button" disabled>
-            Start chat
+          <div class="welcome-titles">
+            <h1>Welcome to your<br>reflection journey.</h1>
+            <p class="welcome-sub">A quiet space for morning clarity and<br>intentional thought.</p>
+          </div>
+        </div>
+
+        <div class="welcome-form">
+          <div id="idFieldWrap" class="field-wrap">
+            <label class="field-label" for="participantId">Participant ID</label>
+            <input id="participantId" type="text" placeholder="e.g. P-7823" autocomplete="username" spellcheck="false" />
+          </div>
+          <p id="authMessage" class="auth-message" hidden></p>
+          <div class="welcome-actions">
+            <button id="startStudyBtn" class="btn-primary">Start Study</button>
+            <button id="generateIdBtn" class="btn-secondary">Generate Participant ID</button>
+          </div>
+        </div>
+      </main>
+
+      <footer class="welcome-footer">
+        <div class="footer-rule"></div>
+        <p class="footer-text">MORNINGMIND RESEARCH PROTOCOL<br>2024</p>
+      </footer>
+    </div>
+
+    <!-- ═══════════════════════════════════════════
+         SCREEN 2 — Chat
+    ═══════════════════════════════════════════ -->
+    <div id="screen-chat" class="screen screen-chat" hidden>
+
+      <nav class="chat-nav">
+        <div class="nav-brand">
+          <svg class="waves-icon" width="20" height="16" viewBox="0 0 20 16" fill="none" aria-hidden="true">
+            <path d="M0 2C3 0 5 2 7 2C9 2 11 0 13 0C15 0 17 2 19 2C19.5 2 20 2.2 20 2.2" stroke="#1B1B1C" stroke-width="1.5" stroke-linecap="round"/>
+            <path d="M0 8C3 6 5 8 7 8C9 8 11 6 13 6C15 6 17 8 19 8C19.5 8 20 8.2 20 8.2" stroke="#1B1B1C" stroke-width="1.5" stroke-linecap="round"/>
+            <path d="M0 14C3 12 5 14 7 14C9 14 11 12 13 12C15 12 17 14 19 14C19.5 14 20 14.2 20 14.2" stroke="#1B1B1C" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          <span class="nav-title">Morning Reflection</span>
+        </div>
+        <button id="endSessionBtn" class="icon-btn" aria-label="End session" title="End session">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1B1B1C" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </button>
+      </nav>
+
+      <p id="chatDate" class="chat-date"></p>
+
+      <div id="chatLog" class="chat-log" aria-live="polite" aria-label="Conversation"></div>
+
+      <!-- Mic state -->
+      <div id="micArea" class="bottom-area mic-area">
+        <button id="micBtn" class="mic-btn" aria-label="Tap to speak">
+          <svg width="48" height="48" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" fill="white"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2" fill="none" stroke="white" stroke-width="2" stroke-linecap="round"/>
+            <line x1="12" y1="19" x2="12" y2="23" stroke="white" stroke-width="2" stroke-linecap="round"/>
+            <line x1="8" y1="23" x2="16" y2="23" stroke="white" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+        <p id="micLabel" class="mic-label">TAP TO SPEAK</p>
+      </div>
+
+      <!-- Review state -->
+      <div id="reviewArea" class="bottom-area review-area" hidden>
+        <div class="recording-card">
+          <button id="playbackBtn" class="playback-circle" aria-label="Play recording">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="white" aria-hidden="true">
+              <polygon points="5 3 19 12 5 21 5 3"/>
+            </svg>
           </button>
-        </div>
-
-        <div id="chatLog" class="chat-log" aria-live="polite"></div>
-
-        <div class="composer">
-          <div class="controls">
-            <button id="recordButton" class="primary-button" type="button" disabled>
-              Record response
-            </button>
-            <button id="sendButton" class="secondary-button" type="button" disabled>
-              Send recording
-            </button>
+          <div class="waveform" aria-hidden="true">
+            <span class="wbar" style="height:16px"></span><span class="wbar" style="height:24px"></span>
+            <span class="wbar" style="height:32px"></span><span class="wbar" style="height:40px"></span>
+            <span class="wbar" style="height:28px"></span><span class="wbar" style="height:16px"></span>
+            <span class="wbar" style="height:36px"></span><span class="wbar" style="height:20px"></span>
+            <span class="wbar" style="height:32px"></span><span class="wbar" style="height:40px"></span>
+            <span class="wbar" style="height:24px"></span><span class="wbar" style="height:16px"></span>
+            <span class="wbar" style="height:28px"></span><span class="wbar" style="height:36px"></span>
+            <span class="wbar" style="height:20px"></span>
           </div>
-          <p id="statusText" class="status">
-            Press Start chat to let the agent ask the first question.
-          </p>
-          <audio id="playback" class="playback" controls hidden></audio>
+          <span id="recDuration" class="rec-duration">0:00</span>
         </div>
-      </section>
-    </main>
+        <p class="review-hint">Does this sound good?</p>
+        <button id="confirmBtn" class="btn-primary">Yes, continue</button>
+        <button id="rerecordBtn" class="btn-ghost">Re-record</button>
+      </div>
+
+      <!-- Processing state -->
+      <div id="processingArea" class="bottom-area processing-area" hidden>
+        <div class="spinner"></div>
+        <p class="processing-label">Processing your response…</p>
+      </div>
+
+      <audio id="hiddenAudio" hidden></audio>
+    </div>
+
+    <!-- ═══════════════════════════════════════════
+         SCREEN 3 — Morning Complete
+    ═══════════════════════════════════════════ -->
+    <div id="screen-complete" class="screen screen-complete" hidden>
+      <div class="complete-card">
+        <div class="complete-icon-ring">
+          <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#E8956D" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+        </div>
+        <div class="complete-text">
+          <h2>Done for this<br>morning.</h2>
+          <p id="studyDayText" class="complete-day">Day 1 of 14</p>
+        </div>
+      </div>
+      <button id="goHomeBtn" class="btn-primary complete-cta">Go to home</button>
+    </div>
 
     <script type="module" src="/app.js"></script>
   </body>

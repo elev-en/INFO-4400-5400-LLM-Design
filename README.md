@@ -5,11 +5,12 @@ Morning Mirror is a minimal chat system with an LLM agent that opens by asking h
 ## What it does
 
 - Starts the conversation with a morning check-in prompt.
+- Supports per-user sign up and login.
 - Records the user's answer in the browser with `MediaRecorder`.
 - Sends the audio to a Node server.
 - Uses the OpenAI transcription API to turn the recording into text.
 - Sends the transcript and prior chat history to an OpenAI chat model.
-- Logs when the app is opened, when each question is asked, how long the user takes to respond, and which audio file was saved for that response.
+- Logs which user opened the app, when each question is asked, how long the user takes to respond, and which audio file was saved for that response.
 
 ## Run it
 
@@ -32,7 +33,8 @@ Morning Mirror is a minimal chat system with an LLM agent that opens by asking h
 
 - Session events are appended to `data/logs/session-events.jsonl`.
 - Audio recordings are saved in `data/audio/`.
-- Each log row includes a session id, timestamps, response latency, transcript, and the saved recording filename.
+- Registered users are stored in `data/users.json`.
+- Each log row includes user identity, session id, timestamps, response latency, transcript, and the saved recording filename.
 
 ## Optional model overrides
 

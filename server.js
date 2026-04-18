@@ -1,18 +1,15 @@
 import { createServer } from "node:http";
-import { mkdir, readFile, writeFile, appendFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
+import { sql, initDb } from "./db.js";
 
 const PORT = process.env.PORT || 3000;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const MODEL = process.env.OPENAI_CHAT_MODEL || "gpt-4.1-mini";
 const TRANSCRIPTION_MODEL =
   process.env.OPENAI_TRANSCRIPTION_MODEL || "gpt-4o-mini-transcribe";
-const DATA_DIR = join(process.cwd(), "data");
-const LOGS_DIR = join(DATA_DIR, "logs");
-const AUDIO_DIR = join(DATA_DIR, "audio");
-const SESSION_LOG_FILE = join(LOGS_DIR, "session-events.jsonl");
-const sessionState = new Map();
+const AUDIO_DIR = join(process.cwd(), "data", "audio");
 const openingQuestion = "How is your morning going so far?";
 
 const MIME_TYPES = {
@@ -53,6 +50,16 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === "POST" && url.pathname === "/api/register") {
+      await handleRegister(req, res);
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/login") {
+      await handleLogin(req, res);
+      return;
+    }
+
     if (req.method === "POST" && url.pathname === "/api/session") {
       await handleSession(req, res);
       return;
@@ -70,11 +77,13 @@ const server = createServer(async (req, res) => {
   }
 });
 
-await ensureStorage();
+await initDb();
+await mkdir(AUDIO_DIR, { recursive: true });
 server.listen(PORT, () => {
   console.log(`Morning check-in app running at http://localhost:${PORT}`);
 });
 
+// ─── Static files ─────────────────────────────────────────────
 async function serveStatic(pathname, res) {
   const safePath = pathname === "/" ? "/index.html" : pathname;
   const normalizedPath = normalize(safePath)
@@ -94,11 +103,10 @@ async function serveStatic(pathname, res) {
   }
 }
 
+// ─── Chat ─────────────────────────────────────────────────────
 async function handleChat(req, res) {
   if (!OPENAI_API_KEY) {
-    sendJson(res, 500, {
-      error: "Missing OPENAI_API_KEY environment variable."
-    });
+    sendJson(res, 500, { error: "Missing OPENAI_API_KEY environment variable." });
     return;
   }
 
@@ -113,7 +121,9 @@ async function handleChat(req, res) {
     return;
   }
 
-  const session = sessionState.get(sessionId);
+  const [session] = await sql`
+    SELECT * FROM sessions WHERE id = ${sessionId}
+  `;
 
   if (!session) {
     sendJson(res, 404, { error: "Unknown sessionId." });
@@ -121,124 +131,202 @@ async function handleChat(req, res) {
   }
 
   const now = new Date();
-  const askedAt = session.lastQuestionAskedAt
-    ? new Date(session.lastQuestionAskedAt)
+  const askedAt = session.last_question_asked_at
+    ? new Date(session.last_question_asked_at)
     : null;
   const responseLatencyMs = askedAt ? now.getTime() - askedAt.getTime() : null;
-  const turnNumber = session.turnCount + 1;
-  const promptText = questionText || session.lastQuestionText || null;
+  const turnNumber = session.turn_count + 1;
+  const promptText = questionText || session.last_question_text || null;
   const savedAudio = await saveAudioFile(sessionId, audio, mimeType, turnNumber);
 
   try {
     const transcript = await transcribeAudio(audio, mimeType);
     const reply = await generateReply(messages, transcript);
-    const replySentAt = new Date().toISOString();
+    const replySentAt = new Date();
 
-    session.turnCount = turnNumber;
-    session.lastQuestionAskedAt = replySentAt;
-    session.lastQuestionText = reply;
+    await sql`
+      UPDATE sessions SET
+        turn_count             = ${turnNumber},
+        last_question_asked_at = ${replySentAt},
+        last_question_text     = ${reply}
+      WHERE id = ${sessionId}
+    `;
 
-    await logEvent({
-      type: "user_response_received",
-      sessionId,
-      turnNumber,
-      questionText: promptText,
-      questionAskedAt: askedAt?.toISOString() || null,
-      responseReceivedAt: now.toISOString(),
-      responseLatencyMs,
-      recordingStartedAt: recordingStartedAt || null,
-      recordingDurationMs: recordingStartedAt
-        ? now.getTime() - new Date(recordingStartedAt).getTime()
-        : null,
-      transcript,
-      audioFile: savedAudio.fileName,
-      audioBytes: savedAudio.byteLength,
-      mimeType
-    });
+    await sql`
+      INSERT INTO turns (
+        session_id, user_id, username, turn_number,
+        question_text, question_asked_at,
+        response_received_at, response_latency_ms,
+        recording_started_at, recording_duration_ms,
+        transcript, reply,
+        audio_file, audio_bytes, mime_type
+      ) VALUES (
+        ${sessionId}, ${session.user_id}, ${session.username}, ${turnNumber},
+        ${promptText}, ${askedAt?.toISOString() ?? null},
+        ${now.toISOString()}, ${responseLatencyMs},
+        ${recordingStartedAt ?? null},
+        ${recordingStartedAt
+          ? now.getTime() - new Date(recordingStartedAt).getTime()
+          : null},
+        ${transcript}, ${reply},
+        ${savedAudio.fileName}, ${savedAudio.byteLength}, ${mimeType}
+      )
+    `;
 
-    await logEvent({
-      type: "assistant_question_sent",
-      sessionId,
+    await logEvent("assistant_question_sent", sessionId, session.user_id, session.username, {
       turnNumber,
       questionText: reply,
-      askedAt: replySentAt
+      askedAt: replySentAt.toISOString()
     });
 
     sendJson(res, 200, {
       transcript,
       reply,
-      questionAskedAt: replySentAt,
+      questionAskedAt: replySentAt.toISOString(),
       audioFile: savedAudio.fileName,
       responseLatencyMs
     });
   } catch (error) {
-    await logEvent({
-      type: "chat_turn_failed",
-      sessionId,
-      turnNumber,
-      questionText: promptText,
-      questionAskedAt: askedAt?.toISOString() || null,
-      responseReceivedAt: now.toISOString(),
-      responseLatencyMs,
-      recordingStartedAt: recordingStartedAt || null,
-      audioFile: savedAudio.fileName,
-      audioBytes: savedAudio.byteLength,
-      mimeType,
-      error: error.message
-    });
+    await sql`
+      INSERT INTO turns (
+        session_id, user_id, username, turn_number,
+        question_text, question_asked_at,
+        response_received_at, response_latency_ms,
+        recording_started_at,
+        audio_file, audio_bytes, mime_type,
+        failed, error_message
+      ) VALUES (
+        ${sessionId}, ${session.user_id}, ${session.username}, ${turnNumber},
+        ${promptText}, ${askedAt?.toISOString() ?? null},
+        ${now.toISOString()}, ${responseLatencyMs},
+        ${recordingStartedAt ?? null},
+        ${savedAudio.fileName}, ${savedAudio.byteLength}, ${mimeType},
+        TRUE, ${error.message}
+      )
+    `;
     throw error;
   }
 }
 
+// ─── Register ─────────────────────────────────────────────────
+async function handleRegister(req, res) {
+  const body = await readJsonBody(req);
+  const username = normalizeUsername(body?.username);
+  const password = body?.password;
+
+  if (!username || !password) {
+    sendJson(res, 400, { error: "Username and password are required." });
+    return;
+  }
+
+  const [existing] = await sql`
+    SELECT id FROM users WHERE username = ${username}
+  `;
+
+  if (existing) {
+    sendJson(res, 409, { error: "That username is already taken." });
+    return;
+  }
+
+  const user = buildUser(username, password);
+
+  await sql`
+    INSERT INTO users (id, username, password_hash, password_salt, created_at)
+    VALUES (${user.id}, ${user.username}, ${user.passwordHash}, ${user.passwordSalt}, ${user.createdAt})
+  `;
+
+  await logEvent("user_registered", null, user.id, user.username, {});
+
+  sendJson(res, 200, { user: { id: user.id, username: user.username } });
+}
+
+// ─── Login ────────────────────────────────────────────────────
+async function handleLogin(req, res) {
+  const body = await readJsonBody(req);
+  const username = normalizeUsername(body?.username);
+  const password = body?.password;
+
+  if (!username || !password) {
+    sendJson(res, 400, { error: "Username and password are required." });
+    return;
+  }
+
+  const [user] = await sql`
+    SELECT * FROM users WHERE username = ${username}
+  `;
+
+  if (!user || !verifyPassword(password, user.password_hash, user.password_salt)) {
+    sendJson(res, 401, { error: "Invalid username or password." });
+    return;
+  }
+
+  await logEvent("user_logged_in", null, user.id, user.username, {});
+
+  sendJson(res, 200, { user: { id: user.id, username: user.username } });
+}
+
+// ─── Create session ───────────────────────────────────────────
 async function handleSession(req, res) {
   const body = await readJsonBody(req);
+  const userId = body?.userId;
+  const username = normalizeUsername(body?.username);
+
+  if (!userId || !username) {
+    sendJson(res, 400, { error: "Authenticated user information is required." });
+    return;
+  }
+
   const sessionId = randomUUID();
   const openedAt = new Date().toISOString();
-  const session = {
-    createdAt: openedAt,
-    turnCount: 0,
-    lastQuestionAskedAt: null,
-    lastQuestionText: null,
-    userAgent: body?.userAgent || null
-  };
 
-  sessionState.set(sessionId, session);
+  await sql`
+    INSERT INTO sessions (id, user_id, username, user_agent, opened_at)
+    VALUES (
+      ${sessionId}, ${userId}, ${username},
+      ${body?.userAgent ?? null}, ${openedAt}
+    )
+  `;
 
-  await logEvent({
-    type: "app_opened",
-    sessionId,
+  await logEvent("app_opened", sessionId, userId, username, {
     openedAt,
-    userAgent: body?.userAgent || null
+    userAgent: body?.userAgent ?? null
   });
 
   sendJson(res, 200, { sessionId });
 }
 
+// ─── Start session (opening question) ────────────────────────
 async function handleSessionStart(req, res) {
   const body = await readJsonBody(req);
   const { sessionId } = body ?? {};
-  const session = sessionState.get(sessionId);
+
+  const [session] = await sql`
+    SELECT * FROM sessions WHERE id = ${sessionId}
+  `;
 
   if (!session) {
     sendJson(res, 404, { error: "Unknown sessionId." });
     return;
   }
 
-  if (session.lastQuestionAskedAt) {
+  if (session.last_question_asked_at) {
     sendJson(res, 200, {
-      openingQuestion: session.lastQuestionText,
-      questionAskedAt: session.lastQuestionAskedAt
+      openingQuestion: session.last_question_text,
+      questionAskedAt: session.last_question_asked_at
     });
     return;
   }
 
   const askedAt = new Date().toISOString();
-  session.lastQuestionAskedAt = askedAt;
-  session.lastQuestionText = openingQuestion;
 
-  await logEvent({
-    type: "assistant_question_sent",
-    sessionId,
+  await sql`
+    UPDATE sessions SET
+      last_question_asked_at = ${askedAt},
+      last_question_text     = ${openingQuestion}
+    WHERE id = ${sessionId}
+  `;
+
+  await logEvent("assistant_question_sent", sessionId, session.user_id, session.username, {
     turnNumber: 0,
     questionText: openingQuestion,
     askedAt
@@ -247,6 +335,7 @@ async function handleSessionStart(req, res) {
   sendJson(res, 200, { openingQuestion, questionAskedAt: askedAt });
 }
 
+// ─── OpenAI helpers ───────────────────────────────────────────
 async function transcribeAudio(base64Audio, mimeType) {
   const bytes = Buffer.from(base64Audio, "base64");
   const extension = mimeType.includes("wav") ? "wav" : "webm";
@@ -260,15 +349,12 @@ async function transcribeAudio(base64Audio, mimeType) {
 
   const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${OPENAI_API_KEY}`
-    },
+    headers: { Authorization: `Bearer ${OPENAI_API_KEY}` },
     body: form
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Transcription failed: ${errorText}`);
+    throw new Error(`Transcription failed: ${await response.text()}`);
   }
 
   const data = await response.json();
@@ -288,26 +374,21 @@ async function generateReply(messages, transcript) {
       "Content-Type": "application/json",
       Authorization: `Bearer ${OPENAI_API_KEY}`
     },
-    body: JSON.stringify({
-      model: MODEL,
-      temperature: 0.8,
-      messages: conversation
-    })
+    body: JSON.stringify({ model: MODEL, temperature: 0.8, messages: conversation })
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Chat completion failed: ${errorText}`);
+    throw new Error(`Chat completion failed: ${await response.text()}`);
   }
 
   const data = await response.json();
   return data.choices?.[0]?.message?.content?.trim() || "";
 }
 
+// ─── Utilities ────────────────────────────────────────────────
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
-
     req.on("data", (chunk) => chunks.push(chunk));
     req.on("end", () => {
       try {
@@ -322,15 +403,8 @@ function readJsonBody(req) {
 }
 
 function sendJson(res, statusCode, payload) {
-  res.writeHead(statusCode, {
-    "Content-Type": "application/json; charset=utf-8"
-  });
+  res.writeHead(statusCode, { "Content-Type": "application/json; charset=utf-8" });
   res.end(JSON.stringify(payload));
-}
-
-async function ensureStorage() {
-  await mkdir(LOGS_DIR, { recursive: true });
-  await mkdir(AUDIO_DIR, { recursive: true });
 }
 
 async function saveAudioFile(sessionId, base64Audio, mimeType, turnNumber) {
@@ -338,22 +412,46 @@ async function saveAudioFile(sessionId, base64Audio, mimeType, turnNumber) {
   const extension = mimeType.includes("wav") ? "wav" : "webm";
   const fileName = `${sessionId}-turn-${String(turnNumber).padStart(2, "0")}.${extension}`;
   const filePath = join(AUDIO_DIR, fileName);
-
   await writeFile(filePath, bytes);
+  return { fileName, filePath, byteLength: bytes.byteLength };
+}
 
+async function logEvent(type, sessionId, userId, username, payload) {
+  await sql`
+    INSERT INTO events (type, session_id, user_id, username, payload)
+    VALUES (
+      ${type},
+      ${sessionId ?? null},
+      ${userId ?? null},
+      ${username ?? null},
+      ${sql.json(payload)}
+    )
+  `;
+}
+
+function normalizeUsername(username) {
+  if (typeof username !== "string") return "";
+  return username.trim().toLowerCase();
+}
+
+function buildUser(username, password) {
+  const salt = randomBytes(16).toString("hex");
+  const hash = hashPassword(password, salt);
   return {
-    fileName,
-    filePath,
-    byteLength: bytes.byteLength,
-    savedAt: new Date().toISOString()
+    id: randomUUID(),
+    username,
+    passwordSalt: salt,
+    passwordHash: hash,
+    createdAt: new Date().toISOString()
   };
 }
 
-async function logEvent(event) {
-  const payload = {
-    loggedAt: new Date().toISOString(),
-    ...event
-  };
+function hashPassword(password, salt) {
+  return scryptSync(password, salt, 64).toString("hex");
+}
 
-  await appendFile(SESSION_LOG_FILE, `${JSON.stringify(payload)}\n`, "utf8");
+function verifyPassword(password, passwordHash, passwordSalt) {
+  const incoming = Buffer.from(hashPassword(password, passwordSalt), "hex");
+  const stored   = Buffer.from(passwordHash, "hex");
+  return timingSafeEqual(incoming, stored);
 }
