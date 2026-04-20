@@ -1,3 +1,21 @@
+/* ─── Dev bar ───────────────────────────────────────────────── */
+#dev-bar {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 9999;
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  padding: 8px 12px;
+  background: #1a1a2e; border-top: 1px solid #333;
+  font-family: monospace; font-size: 11px;
+}
+#dev-bar .dev-label {
+  color: #f7c59f; font-weight: bold; letter-spacing: .08em; margin-right: 4px;
+}
+#dev-bar button {
+  padding: 4px 10px; border-radius: 4px; border: 1px solid #555;
+  background: #2a2a4a; color: #e0e0ff; cursor: pointer; font-size: 11px;
+  font-family: monospace;
+}
+#dev-bar button:hover { background: #3a3a6a; }
+
 /* ─── Tokens ────────────────────────────────────────────────── */
 :root {
   --bg:          #fff5e8;

@@ -81,6 +81,9 @@ let selectedIntensity  = 3;
 let morningSessionDate = null; // Date object: when today's morning session was opened
 let eveningWindowTimer = null; // setTimeout to auto-enable evening button
 
+// ─── Dev mode ────────────────────────────────────────────────
+const DEV = new URLSearchParams(location.search).has("dev");
+
 // ─── Boot ────────────────────────────────────────────────────
 init();
 
@@ -88,6 +91,54 @@ function init() {
   setDateLabels();
   wireEvents();
   hydrateUser();
+  if (DEV) mountDevBar();
+}
+
+function mountDevBar() {
+  const bar = document.createElement("div");
+  bar.id = "dev-bar";
+  bar.innerHTML = `
+    <span class="dev-label">DEV</span>
+    <button data-screen="welcome">Welcome</button>
+    <button data-screen="home">Home</button>
+    <button data-screen="chat" data-action="chat">Chat</button>
+    <button data-screen="morningComplete">Morning Done</button>
+    <button data-screen="morningHome" data-action="morningHome">Morning Home</button>
+    <button data-screen="eveningEmoji">Evening Emoji</button>
+    <button data-screen="eveningSlider">Evening Slider</button>
+    <button data-screen="eveningText">Evening Text</button>
+    <button data-screen="eveningComplete">Evening Complete</button>
+  `;
+  document.body.appendChild(bar);
+
+  bar.addEventListener("click", async (e) => {
+    const btn = e.target.closest("button[data-screen]");
+    if (!btn) return;
+    const screen = btn.dataset.screen;
+    const action = btn.dataset.action;
+
+    if (action === "chat") {
+      // Ensure we have a session before showing chat
+      if (!currentUser) {
+        const data = await apiPost("/api/register", { username: `dev-${Date.now()}`, password: "dev" }).catch(() =>
+          apiPost("/api/login", { username: "dev", password: "dev" })
+        );
+        currentUser = data.user;
+        sessionId = null;
+      }
+      if (!sessionId) await createSession();
+      await startChat();
+      return;
+    }
+
+    if (action === "morningHome") {
+      morningSessionDate = new Date();
+      showMorningHome();
+      return;
+    }
+
+    showScreen(screen);
+  });
 }
 
 function wireEvents() {
@@ -459,11 +510,12 @@ function handleConclude() {
 
 // ─── Morning window gating ───────────────────────────────────
 function isMorningWindowOpen() {
-  return new Date().getHours() < 12;
+  return DEV || new Date().getHours() < 12;
 }
 
 // ─── Evening window gating ───────────────────────────────────
 function isEveningWindowOpen(date) {
+  if (DEV) return true;
   const now = new Date();
   const base = new Date(date);
   const open = new Date(base); open.setHours(21, 0, 0, 0);       // 9 pm same day
