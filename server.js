@@ -142,11 +142,16 @@ async function handleChat(req, res) {
   const responseLatencyMs = askedAt ? now.getTime() - askedAt.getTime() : null;
   const turnNumber = session.turn_count + 1;
   const promptText = questionText || session.last_question_text || null;
-  const savedAudio = await saveAudioFile(sessionId, audio, mimeType, turnNumber);
+
+  const audioBuffer = Buffer.from(audio, "base64");
+  const savedAudio = await saveAudioFile(sessionId, audioBuffer, mimeType, turnNumber);
+
+  const elapsedMs = now.getTime() - new Date(session.opened_at).getTime();
+  const isFinalTurn = turnNumber >= 10 || elapsedMs >= 10 * 60 * 1000;
 
   try {
     const transcript = await transcribeAudio(audio, mimeType);
-    const reply = await generateReply(messages, transcript);
+    const reply = await generateReply(messages, transcript, isFinalTurn);
     const replySentAt = new Date();
 
     await sql`
@@ -164,7 +169,7 @@ async function handleChat(req, res) {
         response_received_at, response_latency_ms,
         recording_started_at, recording_duration_ms,
         transcript, reply,
-        audio_file, audio_bytes, mime_type
+        audio_file, audio_bytes, audio_data, mime_type
       ) VALUES (
         ${sessionId}, ${session.user_id}, ${session.username}, ${turnNumber},
         ${promptText}, ${askedAt?.toISOString() ?? null},
@@ -174,14 +179,15 @@ async function handleChat(req, res) {
           ? now.getTime() - new Date(recordingStartedAt).getTime()
           : null},
         ${transcript}, ${reply},
-        ${savedAudio.fileName}, ${savedAudio.byteLength}, ${mimeType}
+        ${savedAudio.fileName}, ${savedAudio.byteLength}, ${audioBuffer}, ${mimeType}
       )
     `;
 
     await logEvent("assistant_question_sent", sessionId, session.user_id, session.username, {
       turnNumber,
       questionText: reply,
-      askedAt: replySentAt.toISOString()
+      askedAt: replySentAt.toISOString(),
+      sessionComplete: isFinalTurn
     });
 
     sendJson(res, 200, {
@@ -189,7 +195,8 @@ async function handleChat(req, res) {
       reply,
       questionAskedAt: replySentAt.toISOString(),
       audioFile: savedAudio.fileName,
-      responseLatencyMs
+      responseLatencyMs,
+      sessionComplete: isFinalTurn
     });
   } catch (error) {
     await sql`
@@ -198,14 +205,14 @@ async function handleChat(req, res) {
         question_text, question_asked_at,
         response_received_at, response_latency_ms,
         recording_started_at,
-        audio_file, audio_bytes, mime_type,
+        audio_file, audio_bytes, audio_data, mime_type,
         failed, error_message
       ) VALUES (
         ${sessionId}, ${session.user_id}, ${session.username}, ${turnNumber},
         ${promptText}, ${askedAt?.toISOString() ?? null},
         ${now.toISOString()}, ${responseLatencyMs},
         ${recordingStartedAt ?? null},
-        ${savedAudio.fileName}, ${savedAudio.byteLength}, ${mimeType},
+        ${savedAudio.fileName}, ${savedAudio.byteLength}, ${audioBuffer}, ${mimeType},
         TRUE, ${error.message}
       )
     `;
@@ -262,7 +269,12 @@ async function handleLogin(req, res) {
     SELECT * FROM users WHERE username = ${username}
   `;
 
-  if (!user || !verifyPassword(password.toLowerCase(), user.password_hash, user.password_salt)) {
+  const passwordOk =
+    verifyPassword(password.toLowerCase(), user.password_hash, user.password_salt) ||
+    verifyPassword(password,               user.password_hash, user.password_salt) ||
+    verifyPassword(password.toUpperCase(), user.password_hash, user.password_salt);
+
+  if (!user || !passwordOk) {
     sendJson(res, 401, { error: "Invalid username or password." });
     return;
   }
@@ -273,9 +285,35 @@ async function handleLogin(req, res) {
     SELECT COUNT(*)::int AS count FROM sessions WHERE user_id = ${user.id}
   `;
 
+  // Check if user already has a session from today with at least one completed turn
+  const [todaySession] = await sql`
+    SELECT id, day_number, opened_at, turn_count
+    FROM sessions
+    WHERE user_id = ${user.id}
+      AND opened_at::date = CURRENT_DATE
+    ORDER BY opened_at DESC
+    LIMIT 1
+  `;
+
+  const morningDoneToday = !!(todaySession && todaySession.turn_count > 0);
+
+  // Check if they already submitted an evening check-in for today's session
+  let eveningDoneToday = false;
+  if (morningDoneToday) {
+    const [ev] = await sql`
+      SELECT id FROM evening_checkins WHERE session_id = ${todaySession.id} LIMIT 1
+    `;
+    eveningDoneToday = !!ev;
+  }
+
   sendJson(res, 200, {
     user: { id: user.id, username: user.username },
-    dayNumber: count + 1
+    dayNumber: count + 1,
+    morningDoneToday,
+    eveningDoneToday,
+    todaySessionId:  morningDoneToday ? todaySession.id         : null,
+    todayDayNumber:  morningDoneToday ? todaySession.day_number  : null,
+    todayOpenedAt:   morningDoneToday ? todaySession.opened_at   : null
   });
 }
 
@@ -413,7 +451,7 @@ async function transcribeAudio(base64Audio, mimeType) {
   return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
 }
 
-async function generateReply(messages, transcript) {
+async function generateReply(messages, transcript, isFinalTurn = false) {
   const contents = [
     ...messages.map((m) => ({
       role: m.role === "assistant" ? "model" : "user",
@@ -422,13 +460,17 @@ async function generateReply(messages, transcript) {
     { role: "user", parts: [{ text: transcript }] }
   ];
 
+  const effectivePrompt = isFinalTurn
+    ? systemPrompt + "\n\nThis is the final turn of the session. Do NOT ask a follow-up question. Instead, warmly wrap up the conversation in 1-2 sentences, thanking them for sharing and wishing them a good morning."
+    : systemPrompt;
+
   const response = await fetch(
     `${GEMINI_BASE}/${MODEL}:generateContent?key=${GOOGLE_API_KEY}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        system_instruction: { parts: [{ text: systemPrompt }] },
+        system_instruction: { parts: [{ text: effectivePrompt }] },
         contents,
         generationConfig: { temperature: 0.8 }
       })
@@ -465,13 +507,12 @@ function sendJson(res, statusCode, payload) {
   res.end(JSON.stringify(payload));
 }
 
-async function saveAudioFile(sessionId, base64Audio, mimeType, turnNumber) {
-  const bytes = Buffer.from(base64Audio, "base64");
+async function saveAudioFile(sessionId, audioBuffer, mimeType, turnNumber) {
   const extension = mimeType.includes("wav") ? "wav" : "webm";
   const fileName = `${sessionId}-turn-${String(turnNumber).padStart(2, "0")}.${extension}`;
   const filePath = join(AUDIO_DIR, fileName);
-  await writeFile(filePath, bytes);
-  return { fileName, filePath, byteLength: bytes.byteLength };
+  await writeFile(filePath, audioBuffer);
+  return { fileName, filePath, byteLength: audioBuffer.byteLength };
 }
 
 async function logEvent(type, sessionId, userId, username, payload) {

@@ -78,6 +78,8 @@ export async function initDb() {
     )
   `;
 
+  await sql`ALTER TABLE turns ADD COLUMN IF NOT EXISTS audio_data BYTEA`;
+
   await sql`
     CREATE TABLE IF NOT EXISTS events (
       id         SERIAL      PRIMARY KEY,

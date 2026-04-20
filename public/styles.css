@@ -177,6 +177,7 @@ html, body {
 .home-date { margin: 0; font-size: 13px; color: var(--muted); }
 .home-greeting { margin: 0; font-family: 'Noto Serif', serif; font-size: 40px; font-weight: 500; color: var(--ink-light); line-height: 1.15; }
 .home-intro { margin: 0; font-size: 16px; color: var(--teal); line-height: 1.65; max-width: 320px; }
+.home-deadline { margin: 12px 0 0; font-size: 12px; color: var(--muted); letter-spacing: .02em; }
 .home-footer { padding: 24px 32px 48px; }
 
 /* ══════════════════════════════════════════════════════════════

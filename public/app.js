@@ -78,6 +78,8 @@ let recSeconds         = 0;
 // Evening state
 let selectedEmoji      = null;
 let selectedIntensity  = 3;
+let morningSessionDate = null; // Date object: when today's morning session was opened
+let eveningWindowTimer = null; // setTimeout to auto-enable evening button
 
 // ─── Boot ────────────────────────────────────────────────────
 init();
@@ -106,7 +108,10 @@ function wireEvents() {
   endSessionBtn.addEventListener("click", handleConclude);
   hiddenAudio.addEventListener("ended", resetPlaybackIcon);
   // Morning complete / home
-  goToMorningHomeBtn.addEventListener("click", () => showScreen("morningHome"));
+  goToMorningHomeBtn.addEventListener("click", () => {
+    if (!morningSessionDate) morningSessionDate = new Date();
+    showMorningHome();
+  });
   startEveningBtn.addEventListener("click", () => showScreen("eveningEmoji"));
   skipEveningBtn.addEventListener("click", handleSkipEvening);
   // Evening emoji
@@ -196,6 +201,34 @@ async function handleStartStudy() {
     }
     currentUser = data.user;
     localStorage.setItem("morning-mirror-user", JSON.stringify(currentUser));
+
+    // Returning user who already completed morning today
+    if (data.morningDoneToday && !data.eveningDoneToday) {
+      sessionId = data.todaySessionId;
+      morningSessionDate = new Date(data.todayOpenedAt);
+      setDayNumber(data.todayDayNumber);
+      showMorningHome();
+      return;
+    }
+
+    // Returning user who already completed both morning and evening today
+    if (data.morningDoneToday && data.eveningDoneToday) {
+      setDayNumber(data.todayDayNumber);
+      showMsg("You've completed today's reflection. See you tomorrow morning!", "success");
+      startStudyBtn.disabled = false;
+      startStudyBtn.textContent = "Continue study";
+      return;
+    }
+
+    // Morning window has closed for today without a completed session
+    if (!isMorningWindowOpen()) {
+      setDayNumber(data.dayNumber ?? 1);
+      showMsg("Morning reflection has closed for today (deadline: 12:00 PM). See you tomorrow!", "error");
+      startStudyBtn.disabled = false;
+      startStudyBtn.textContent = "Continue study";
+      return;
+    }
+
     setDayNumber(data.dayNumber ?? 1);
     await launchSession();
   } catch (err) {
@@ -206,6 +239,11 @@ async function handleStartStudy() {
 }
 
 async function handleGenerateId() {
+  if (!isMorningWindowOpen()) {
+    showMsg("Morning reflection has closed for today (deadline: 12:00 PM). Come back tomorrow morning!", "error");
+    return;
+  }
+
   const id = `P-${Math.floor(1000 + Math.random() * 9000)}`;
   generateIdBtn.disabled = true;
   generateIdBtn.textContent = "Generating…";
@@ -250,6 +288,7 @@ async function createSession() {
     username:  currentUser.username
   });
   sessionId = sid;
+  morningSessionDate = new Date();
   setDayNumber(dayNumber);
 }
 
@@ -266,6 +305,14 @@ function launchHome() {
 
 // ─── Home → Chat ─────────────────────────────────────────────
 async function startChat() {
+  if (!isMorningWindowOpen()) {
+    showScreen("welcome");
+    showMsg("Morning reflection has closed for today (deadline: 12:00 PM). See you tomorrow!", "error");
+    startStudyBtn.disabled = false;
+    startStudyBtn.textContent = "Continue study";
+    return;
+  }
+
   startRecordBtn.disabled = true;
   startRecordBtn.textContent = "Loading…";
   showScreen("chat");
@@ -391,7 +438,13 @@ async function sendRecording() {
     recordingStartedAt = null;
     hiddenAudio.removeAttribute("src");
     resetPlaybackIcon();
-    setChatState("idle");
+
+    if (data.sessionComplete) {
+      setChatState("idle");
+      setTimeout(() => showScreen("morningComplete"), 2500);
+    } else {
+      setChatState("idle");
+    }
   } catch (err) {
     console.error(err);
     setChatState("review");
@@ -402,6 +455,67 @@ async function sendRecording() {
 function handleConclude() {
   if (conversation.length < 2 && !confirm("End this session?")) return;
   showScreen("morningComplete");
+}
+
+// ─── Morning window gating ───────────────────────────────────
+function isMorningWindowOpen() {
+  return new Date().getHours() < 12;
+}
+
+// ─── Evening window gating ───────────────────────────────────
+function isEveningWindowOpen(date) {
+  const now = new Date();
+  const base = new Date(date);
+  const open = new Date(base); open.setHours(21, 0, 0, 0);       // 9 pm same day
+  const close = new Date(base); close.setDate(close.getDate() + 1);
+  close.setHours(7, 0, 0, 0);                                     // 7 am next day
+  return now >= open && now < close;
+}
+
+function msUntilEveningOpen(date) {
+  const base = new Date(date);
+  const open = new Date(base); open.setHours(21, 0, 0, 0);
+  const now = new Date();
+  return open > now ? open - now : 0;
+}
+
+function showMorningHome() {
+  clearTimeout(eveningWindowTimer);
+  showScreen("morningHome");
+
+  const date = morningSessionDate || new Date();
+
+  if (isEveningWindowOpen(date)) {
+    startEveningBtn.disabled = false;
+    startEveningBtn.textContent = "Evening Reflection";
+    startEveningBtn.title = "";
+  } else {
+    // Check if the window has already passed (after 7am next day) — shouldn't happen in practice
+    const now = new Date();
+    const close = new Date(date); close.setDate(close.getDate() + 1); close.setHours(7, 0, 0, 0);
+    if (now >= close) {
+      // Window closed — hide evening option entirely
+      startEveningBtn.disabled = true;
+      startEveningBtn.textContent = "Evening window closed";
+      startEveningBtn.title = "The evening reflection window has passed for today.";
+      return;
+    }
+
+    // Window hasn't opened yet — show countdown and auto-enable
+    startEveningBtn.disabled = true;
+    const msLeft = msUntilEveningOpen(date);
+    const hrsLeft = Math.ceil(msLeft / 3600000);
+    startEveningBtn.textContent = hrsLeft <= 1
+      ? "Evening opens soon"
+      : `Evening opens at 9:00 PM`;
+    startEveningBtn.title = "Available from 9:00 PM tonight until 7:00 AM tomorrow.";
+
+    eveningWindowTimer = setTimeout(() => {
+      startEveningBtn.disabled = false;
+      startEveningBtn.textContent = "Evening Reflection";
+      startEveningBtn.title = "";
+    }, msLeft);
+  }
 }
 
 // ─── Evening flow ────────────────────────────────────────────
@@ -440,6 +554,8 @@ function handleEveningDone() {
 
 function resetWelcome() {
   sessionId = null;
+  morningSessionDate = null;
+  clearTimeout(eveningWindowTimer);
   conversation.length = 0;
   chatLog.innerHTML   = "";
   selectedEmoji       = null;
