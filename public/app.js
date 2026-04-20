@@ -26,6 +26,10 @@ const gotItBtn        = document.getElementById("gotItBtn");
 // Home
 const homeDayLabel    = document.getElementById("homeDayLabel");
 const homeDate        = document.getElementById("homeDate");
+const homeGreeting    = document.getElementById("homeGreeting");
+const homeIntro       = document.getElementById("homeIntro");
+const homeDeadline    = document.getElementById("homeDeadline");
+const homeLockMsg     = document.getElementById("homeLockMsg");
 const startRecordBtn  = document.getElementById("startRecordBtn");
 // Chat
 const chatDate        = document.getElementById("chatDate");
@@ -49,8 +53,11 @@ const goToMorningHomeBtn = document.getElementById("goToMorningHomeBtn");
 const startEveningBtn = document.getElementById("startEveningBtn");
 const skipEveningBtn  = document.getElementById("skipEveningBtn");
 // Evening emoji
-const emojiGrid       = document.getElementById("emojiGrid");
-const emojiNextBtn    = document.getElementById("emojiNextBtn");
+const emojiGrid         = document.getElementById("emojiGrid");
+const emojiNextBtn      = document.getElementById("emojiNextBtn");
+const eveningLockedMain = document.getElementById("eveningLockedMain");
+const eveningActiveMain = document.getElementById("eveningActiveMain");
+const eveningEmojiFooter= document.getElementById("eveningEmojiFooter");
 // Evening slider
 const intensitySlider = document.getElementById("intensitySlider");
 const sliderNextBtn   = document.getElementById("sliderNextBtn");
@@ -79,10 +86,23 @@ let recSeconds         = 0;
 let selectedEmoji      = null;
 let selectedIntensity  = 3;
 let morningSessionDate = null; // Date object: when today's morning session was opened
+let morningCompleted   = false; // true only if morning reflection was actually completed
 let eveningWindowTimer = null; // setTimeout to auto-enable evening button
 
 // ─── Dev mode ────────────────────────────────────────────────
 const DEV = new URLSearchParams(location.search).has("dev");
+let devTime = null; // HH, MM or null
+let devDate = null; // { y, m, d } or null
+
+function getNow() {
+  const base = new Date();
+  const y = devDate ? devDate.y : base.getFullYear();
+  const m = devDate ? devDate.m : base.getMonth();
+  const d = devDate ? devDate.d : base.getDate();
+  const h = devTime ? devTime.h : base.getHours();
+  const min = devTime ? devTime.min : base.getMinutes();
+  return new Date(y, m, d, h, min, 0, 0);
+}
 
 // ─── Boot ────────────────────────────────────────────────────
 init();
@@ -95,30 +115,119 @@ function init() {
 }
 
 function mountDevBar() {
-  const bar = document.createElement("div");
-  bar.id = "dev-bar";
-  bar.innerHTML = `
-    <span class="dev-label">DEV</span>
-    <button data-screen="welcome">Welcome</button>
-    <button data-screen="home">Home</button>
-    <button data-screen="chat" data-action="chat">Chat</button>
-    <button data-screen="morningComplete">Morning Done</button>
-    <button data-screen="morningHome" data-action="morningHome">Morning Home</button>
-    <button data-screen="eveningEmoji">Evening Emoji</button>
-    <button data-screen="eveningSlider">Evening Slider</button>
-    <button data-screen="eveningText">Evening Text</button>
-    <button data-screen="eveningComplete">Evening Complete</button>
-  `;
-  document.body.appendChild(bar);
+  const now = new Date();
+  const nowTimeStr = now.toTimeString().slice(0, 5);
+  const nowDateStr = now.toISOString().slice(0, 10);
 
-  bar.addEventListener("click", async (e) => {
+  // Toggle button (always visible on the right edge)
+  const toggleBtn = document.createElement("button");
+  toggleBtn.id = "dev-toggle-btn";
+  toggleBtn.textContent = "DEV";
+  document.body.appendChild(toggleBtn);
+
+  // Side panel
+  const panel = document.createElement("div");
+  panel.id = "dev-panel";
+  panel.innerHTML = `
+    <div class="dev-panel-header">
+      <span class="dev-panel-title">DEV TOOLS</span>
+      <button class="dev-panel-close" id="devPanelClose">✕</button>
+    </div>
+
+    <div class="dev-section">
+      <div class="dev-section-label">Mock Date &amp; Time</div>
+      <div class="dev-row">
+        <span class="dev-row-label">Date</span>
+        <input id="devDateInput" type="date" value="${nowDateStr}" class="dev-input" />
+        <button id="devDateClear" class="dev-clear" title="Reset">↺</button>
+      </div>
+      <div class="dev-row">
+        <span class="dev-row-label">Time</span>
+        <input id="devTimeInput" type="time" value="${nowTimeStr}" class="dev-input" />
+        <button id="devTimeClear" class="dev-clear" title="Reset">↺</button>
+      </div>
+    </div>
+
+    <div class="dev-section">
+      <div class="dev-section-label">State</div>
+      <button id="devMorningToggle" class="dev-toggle" data-on="false">Morning: not done</button>
+    </div>
+
+    <div class="dev-section">
+      <div class="dev-section-label">Jump to Screen</div>
+      <div class="dev-screen-grid">
+        <button class="dev-screen-btn" data-screen="welcome">Welcome</button>
+        <button class="dev-screen-btn" data-screen="home">Home</button>
+        <button class="dev-screen-btn" data-screen="chat" data-action="chat">Chat</button>
+        <button class="dev-screen-btn" data-screen="morningComplete">Morning Done</button>
+        <button class="dev-screen-btn" data-screen="morningHome" data-action="morningHome">Morning Home</button>
+        <button class="dev-screen-btn" data-screen="eveningEmoji">Evening Emoji</button>
+        <button class="dev-screen-btn" data-screen="eveningSlider">Ev. Slider</button>
+        <button class="dev-screen-btn" data-screen="eveningText">Ev. Text</button>
+        <button class="dev-screen-btn" data-screen="eveningComplete">Ev. Complete</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(panel);
+
+  // Toggle open/close
+  toggleBtn.addEventListener("click", () => panel.classList.toggle("open"));
+  document.getElementById("devPanelClose").addEventListener("click", () => panel.classList.remove("open"));
+
+  // ── Date / time controls ──────────────────────────────────
+  function refreshDevScreens() {
+    if (!screens.morningHome.hidden) showMorningHome();
+    if (!screens.home.hidden) {
+      if (morningCompleted || isMorningWindowOpen()) launchHome();
+      else launchLockedHome();
+    }
+  }
+
+  const devDateInput = document.getElementById("devDateInput");
+  const devDateClear = document.getElementById("devDateClear");
+  devDateInput.addEventListener("change", () => {
+    const val = devDateInput.value;
+    if (!val) { devDate = null; }
+    else { const [y, m, d] = val.split("-").map(Number); devDate = { y, m: m - 1, d }; }
+    refreshDevScreens();
+  });
+  devDateClear.addEventListener("click", () => {
+    devDate = null;
+    devDateInput.value = new Date().toISOString().slice(0, 10);
+    refreshDevScreens();
+  });
+
+  const devTimeInput = document.getElementById("devTimeInput");
+  const devTimeClear = document.getElementById("devTimeClear");
+  devTimeInput.addEventListener("change", () => {
+    const val = devTimeInput.value;
+    if (!val) { devTime = null; }
+    else { const [h, min] = val.split(":").map(Number); devTime = { h, min }; }
+    refreshDevScreens();
+  });
+  devTimeClear.addEventListener("click", () => {
+    devTime = null;
+    devTimeInput.value = new Date().toTimeString().slice(0, 5);
+    refreshDevScreens();
+  });
+
+  // ── Morning toggle ────────────────────────────────────────
+  const devMorningToggle = document.getElementById("devMorningToggle");
+  devMorningToggle.addEventListener("click", () => {
+    morningCompleted = !morningCompleted;
+    devMorningToggle.dataset.on = morningCompleted;
+    devMorningToggle.textContent = morningCompleted ? "Morning: done ✓" : "Morning: not done";
+    refreshDevScreens();
+  });
+
+  // ── Screen jumps ──────────────────────────────────────────
+  panel.addEventListener("click", async (e) => {
     const btn = e.target.closest("button[data-screen]");
     if (!btn) return;
     const screen = btn.dataset.screen;
     const action = btn.dataset.action;
 
     if (action === "chat") {
-      // Ensure we have a session before showing chat
       if (!currentUser) {
         const data = await apiPost("/api/register", { username: `dev-${Date.now()}`, password: "dev" }).catch(() =>
           apiPost("/api/login", { username: "dev", password: "dev" })
@@ -136,6 +245,8 @@ function mountDevBar() {
       showMorningHome();
       return;
     }
+
+    if (screen === "eveningEmoji") { showEveningEmoji(); return; }
 
     showScreen(screen);
   });
@@ -163,7 +274,7 @@ function wireEvents() {
     if (!morningSessionDate) morningSessionDate = new Date();
     showMorningHome();
   });
-  startEveningBtn.addEventListener("click", () => showScreen("eveningEmoji"));
+  startEveningBtn.addEventListener("click", showEveningEmoji);
   skipEveningBtn.addEventListener("click", handleSkipEvening);
   // Evening emoji
   emojiGrid.addEventListener("click", handleEmojiSelect);
@@ -171,7 +282,9 @@ function wireEvents() {
   // Evening slider
   intensitySlider.addEventListener("input", () => {
     selectedIntensity = parseInt(intensitySlider.value, 10);
+    updateSliderFill();
   });
+  updateSliderFill();
   sliderNextBtn.addEventListener("click", () => showScreen("eveningText"));
   // Evening text
   skipTextBtn.addEventListener("click", () => submitEvening(null));
@@ -257,6 +370,7 @@ async function handleStartStudy() {
     if (data.morningDoneToday && !data.eveningDoneToday) {
       sessionId = data.todaySessionId;
       morningSessionDate = new Date(data.todayOpenedAt);
+      morningCompleted = true;
       setDayNumber(data.todayDayNumber);
       showMorningHome();
       return;
@@ -274,9 +388,7 @@ async function handleStartStudy() {
     // Morning window has closed for today without a completed session
     if (!isMorningWindowOpen()) {
       setDayNumber(data.dayNumber ?? 1);
-      showMsg("Morning reflection has closed for today (deadline: 12:00 PM). See you tomorrow!", "error");
-      startStudyBtn.disabled = false;
-      startStudyBtn.textContent = "Continue study";
+      launchLockedHome();
       return;
     }
 
@@ -291,7 +403,23 @@ async function handleStartStudy() {
 
 async function handleGenerateId() {
   if (!isMorningWindowOpen()) {
-    showMsg("Morning reflection has closed for today (deadline: 12:00 PM). Come back tomorrow morning!", "error");
+    // Register them so their ID is saved, then show the locked home
+    const id = `P-${Math.floor(1000 + Math.random() * 9000)}`;
+    generateIdBtn.disabled = true;
+    generateIdBtn.textContent = "Generating…";
+    try {
+      const data = await apiPost("/api/register", { username: id, password: id });
+      currentUser = data.user;
+      localStorage.setItem("morning-mirror-user", JSON.stringify(currentUser));
+      setDayNumber(1);
+      revealedId.textContent = id.toUpperCase();
+      showScreen("idReveal");
+      gotItBtn.addEventListener("click", launchLockedHome, { once: true });
+    } catch (err) {
+      showMsg(err.message);
+      generateIdBtn.disabled = false;
+      generateIdBtn.textContent = "Generate Participant ID";
+    }
     return;
   }
 
@@ -351,19 +479,30 @@ async function launchSession() {
 function launchHome() {
   conversation.length = 0;
   chatLog.innerHTML   = "";
+  // Ensure home is in unlocked state
+  homeGreeting.textContent   = "Good morning!";
+  homeIntro.hidden           = false;
+  homeDeadline.hidden        = false;
+  homeLockMsg.hidden         = true;
+  startRecordBtn.disabled    = false;
+  startRecordBtn.textContent = "Record";
+  showScreen("home");
+}
+
+function launchLockedHome() {
+  conversation.length = 0;
+  chatLog.innerHTML   = "";
+  homeGreeting.textContent   = "See you tomorrow.";
+  homeIntro.hidden           = true;
+  homeDeadline.hidden        = true;
+  homeLockMsg.hidden         = false;
+  startRecordBtn.disabled    = true;
+  startRecordBtn.textContent = "Closed";
   showScreen("home");
 }
 
 // ─── Home → Chat ─────────────────────────────────────────────
 async function startChat() {
-  if (!isMorningWindowOpen()) {
-    showScreen("welcome");
-    showMsg("Morning reflection has closed for today (deadline: 12:00 PM). See you tomorrow!", "error");
-    startStudyBtn.disabled = false;
-    startStudyBtn.textContent = "Continue study";
-    return;
-  }
-
   startRecordBtn.disabled = true;
   startRecordBtn.textContent = "Loading…";
   showScreen("chat");
@@ -491,6 +630,7 @@ async function sendRecording() {
     resetPlaybackIcon();
 
     if (data.sessionComplete) {
+      morningCompleted = true;
       setChatState("idle");
       setTimeout(() => showScreen("morningComplete"), 2500);
     } else {
@@ -505,18 +645,18 @@ async function sendRecording() {
 // ─── Conclude ────────────────────────────────────────────────
 function handleConclude() {
   if (conversation.length < 2 && !confirm("End this session?")) return;
+  morningCompleted = true;
   showScreen("morningComplete");
 }
 
 // ─── Morning window gating ───────────────────────────────────
 function isMorningWindowOpen() {
-  return DEV || new Date().getHours() < 12;
+  return getNow().getHours() < 12;
 }
 
 // ─── Evening window gating ───────────────────────────────────
 function isEveningWindowOpen(date) {
-  if (DEV) return true;
-  const now = new Date();
+  const now = getNow();
   const base = new Date(date);
   const open = new Date(base); open.setHours(21, 0, 0, 0);       // 9 pm same day
   const close = new Date(base); close.setDate(close.getDate() + 1);
@@ -527,13 +667,20 @@ function isEveningWindowOpen(date) {
 function msUntilEveningOpen(date) {
   const base = new Date(date);
   const open = new Date(base); open.setHours(21, 0, 0, 0);
-  const now = new Date();
+  const now = getNow();
   return open > now ? open - now : 0;
 }
 
 function showMorningHome() {
   clearTimeout(eveningWindowTimer);
   showScreen("morningHome");
+
+  if (!morningCompleted) {
+    startEveningBtn.disabled = true;
+    startEveningBtn.textContent = "Evening Reflection";
+    startEveningBtn.title = "Complete your morning reflection first.";
+    return;
+  }
 
   const date = morningSessionDate || new Date();
 
@@ -543,7 +690,7 @@ function showMorningHome() {
     startEveningBtn.title = "";
   } else {
     // Check if the window has already passed (after 7am next day) — shouldn't happen in practice
-    const now = new Date();
+    const now = getNow();
     const close = new Date(date); close.setDate(close.getDate() + 1); close.setHours(7, 0, 0, 0);
     if (now >= close) {
       // Window closed — hide evening option entirely
@@ -571,6 +718,14 @@ function showMorningHome() {
 }
 
 // ─── Evening flow ────────────────────────────────────────────
+function showEveningEmoji() {
+  const locked = !morningCompleted;
+  eveningLockedMain.hidden  = !locked;
+  eveningActiveMain.hidden  =  locked;
+  eveningEmojiFooter.hidden =  locked;
+  showScreen("eveningEmoji");
+}
+
 function handleEmojiSelect(e) {
   const btn = e.target.closest(".emoji-btn");
   if (!btn) return;
@@ -607,6 +762,7 @@ function handleEveningDone() {
 function resetWelcome() {
   sessionId = null;
   morningSessionDate = null;
+  morningCompleted = false;
   clearTimeout(eveningWindowTimer);
   conversation.length = 0;
   chatLog.innerHTML   = "";
@@ -636,6 +792,16 @@ function appendBubble(role, text) {
   `;
   chatLog.appendChild(el);
   chatLog.scrollTop = chatLog.scrollHeight;
+}
+
+// ─── Slider fill ─────────────────────────────────────────────
+function updateSliderFill() {
+  const min = Number(intensitySlider.min) || 1;
+  const max = Number(intensitySlider.max) || 5;
+  const val = Number(intensitySlider.value);
+  const pct = ((val - min) / (max - min)) * 100;
+  intensitySlider.style.background =
+    `linear-gradient(90deg, #e8956d ${pct}%, rgba(143,169,184,.3) ${pct}%)`;
 }
 
 // ─── Utilities ───────────────────────────────────────────────

@@ -100,9 +100,10 @@
       <main class="home-main">
         <div class="home-content">
           <p id="homeDate" class="home-date"></p>
-          <h1 class="home-greeting">Good morning!</h1>
-          <p class="home-intro">Take a moment to settle in before we begin to ask a bit about your morning.</p>
-          <p class="home-deadline">Reflection closes at <strong>12:00 PM</strong> today.</p>
+          <h1 id="homeGreeting" class="home-greeting">Good morning!</h1>
+          <p id="homeIntro" class="home-intro">Take a moment to settle in before we begin to ask a bit about your morning.</p>
+          <p id="homeDeadline" class="home-deadline">Reflection closes at <strong>12:00 PM</strong> today.</p>
+          <p id="homeLockMsg" class="home-lock-msg" hidden>Morning reflection has closed for today. Come back tomorrow morning!</p>
         </div>
       </main>
 
@@ -231,7 +232,25 @@
       <header class="evening-header">
         <span class="evening-title">Evening Reflection</span>
       </header>
-      <main class="evening-main">
+
+      <!-- Locked state: shown when morning wasn't completed -->
+      <main id="eveningLockedMain" class="evening-main evening-locked-main" hidden>
+        <div class="complete-card">
+          <div class="complete-icon-ring evening-locked-icon">
+            <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#E8956D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+          </div>
+          <div class="complete-text">
+            <h2>Evening reflection<br>unavailable.</h2>
+            <p class="complete-day">Complete your morning reflection first to unlock this.</p>
+          </div>
+        </div>
+      </main>
+
+      <!-- Normal state: shown when morning was completed -->
+      <main id="eveningActiveMain" class="evening-main">
         <h2 class="evening-question">How are you feeling<br>right now?</h2>
         <div id="emojiGrid" class="emoji-grid">
           <button class="emoji-btn" data-emoji="calm"        data-label="CALM">😌</button>
@@ -243,7 +262,8 @@
           <button class="emoji-btn" data-emoji="positive"    data-label="POSITIVE">🙂</button>
         </div>
       </main>
-      <div class="evening-footer">
+
+      <div id="eveningEmojiFooter" class="evening-footer">
         <button id="emojiNextBtn" class="btn-primary" disabled>Next</button>
       </div>
     </div>
