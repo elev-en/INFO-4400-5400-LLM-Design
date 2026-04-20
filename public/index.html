@@ -14,12 +14,12 @@
   </head>
   <body>
 
-    <!-- ═══════════════════════════════════════════
-         SCREEN 1 — Welcome / Login
-    ═══════════════════════════════════════════ -->
+    <!-- ══════════════════════════════════════════
+         1. WELCOME — Start of study
+    ══════════════════════════════════════════ -->
     <div id="screen-welcome" class="screen screen-welcome">
-      <div class="welcome-blob welcome-blob--orange"></div>
-      <div class="welcome-blob welcome-blob--blue"></div>
+      <div class="blob blob--orange"></div>
+      <div class="blob blob--blue"></div>
 
       <header class="welcome-header">
         <span id="dayLabel" class="day-label">Day 1</span>
@@ -42,7 +42,6 @@
             <p class="welcome-sub">A quiet space for morning clarity and<br>intentional thought.</p>
           </div>
         </div>
-
         <div class="welcome-form">
           <div id="idFieldWrap" class="field-wrap">
             <label class="field-label" for="participantId">Participant ID</label>
@@ -62,11 +61,59 @@
       </footer>
     </div>
 
-    <!-- ═══════════════════════════════════════════
-         SCREEN 2 — Chat
-    ═══════════════════════════════════════════ -->
-    <div id="screen-chat" class="screen screen-chat" hidden>
+    <!-- ══════════════════════════════════════════
+         2. ID REVEAL — Your participant ID is
+    ══════════════════════════════════════════ -->
+    <div id="screen-id-reveal" class="screen screen-id-reveal" hidden>
+      <div class="blob blob--orange"></div>
+      <div class="blob blob--blue"></div>
 
+      <main class="id-reveal-main">
+        <p class="id-reveal-label">Your participant ID is</p>
+        <div class="id-badge">
+          <span id="revealedId" class="id-badge-text">P-1</span>
+        </div>
+        <p class="id-reveal-sub">This keeps your data private<br>within the study.</p>
+      </main>
+
+      <div class="id-reveal-footer">
+        <button id="gotItBtn" class="btn-primary">Got it →</button>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════
+         3. HOME — Good morning
+    ══════════════════════════════════════════ -->
+    <div id="screen-home" class="screen screen-home" hidden>
+      <header class="home-header">
+        <div class="home-header-left">
+          <span id="homeDayLabel" class="home-day-chip">DAY 1</span>
+        </div>
+        <button id="homeSettingsBtn" class="icon-btn" aria-label="Settings">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1B1B1C" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </button>
+      </header>
+
+      <main class="home-main">
+        <div class="home-content">
+          <p id="homeDate" class="home-date"></p>
+          <h1 class="home-greeting">Good morning!</h1>
+          <p class="home-intro">Take a moment to settle in before we begin to ask a bit about your morning.</p>
+        </div>
+      </main>
+
+      <div class="home-footer">
+        <button id="startRecordBtn" class="btn-primary">Record</button>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════
+         4. CHAT — Voice conversation
+    ══════════════════════════════════════════ -->
+    <div id="screen-chat" class="screen screen-chat" hidden>
       <nav class="chat-nav">
         <div class="nav-brand">
           <svg class="waves-icon" width="20" height="16" viewBox="0 0 20 16" fill="none" aria-hidden="true">
@@ -76,8 +123,8 @@
           </svg>
           <span class="nav-title">Morning Reflection</span>
         </div>
-        <button id="endSessionBtn" class="icon-btn" aria-label="End session" title="End session">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1B1B1C" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <button id="endSessionBtn" class="icon-btn" aria-label="End session">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1B1B1C" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="3"/>
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
           </svg>
@@ -85,8 +132,7 @@
       </nav>
 
       <p id="chatDate" class="chat-date"></p>
-
-      <div id="chatLog" class="chat-log" aria-live="polite" aria-label="Conversation"></div>
+      <div id="chatLog" class="chat-log" aria-live="polite"></div>
 
       <!-- Mic state -->
       <div id="micArea" class="bottom-area mic-area">
@@ -99,15 +145,14 @@
           </svg>
         </button>
         <p id="micLabel" class="mic-label">TAP TO SPEAK</p>
+        <button id="concludeBtn" class="btn-conclude" hidden>Conclude reflection</button>
       </div>
 
       <!-- Review state -->
       <div id="reviewArea" class="bottom-area review-area" hidden>
         <div class="recording-card">
           <button id="playbackBtn" class="playback-circle" aria-label="Play recording">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="white" aria-hidden="true">
-              <polygon points="5 3 19 12 5 21 5 3"/>
-            </svg>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg>
           </button>
           <div class="waveform" aria-hidden="true">
             <span class="wbar" style="height:16px"></span><span class="wbar" style="height:24px"></span>
@@ -129,28 +174,139 @@
       <!-- Processing state -->
       <div id="processingArea" class="bottom-area processing-area" hidden>
         <div class="spinner"></div>
-        <p class="processing-label">Processing your response…</p>
+        <p class="processing-label">Processing audio…</p>
       </div>
 
       <audio id="hiddenAudio" hidden></audio>
     </div>
 
-    <!-- ═══════════════════════════════════════════
-         SCREEN 3 — Morning Complete
-    ═══════════════════════════════════════════ -->
-    <div id="screen-complete" class="screen screen-complete" hidden>
+    <!-- ══════════════════════════════════════════
+         5. MORNING COMPLETE
+    ══════════════════════════════════════════ -->
+    <div id="screen-morning-complete" class="screen screen-centered" hidden>
       <div class="complete-card">
         <div class="complete-icon-ring">
-          <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#E8956D" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#E8956D" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="20 6 9 17 4 12"/>
           </svg>
         </div>
         <div class="complete-text">
           <h2>Done for this<br>morning.</h2>
-          <p id="studyDayText" class="complete-day">Day 1 of 14</p>
+          <p id="morningDayText" class="complete-day">Day 1 of 14</p>
         </div>
       </div>
-      <button id="goHomeBtn" class="btn-primary complete-cta">Go to home</button>
+      <button id="goToMorningHomeBtn" class="btn-primary complete-cta">Go to home</button>
+    </div>
+
+    <!-- ══════════════════════════════════════════
+         6. MORNING HOME — Your morning is set
+    ══════════════════════════════════════════ -->
+    <div id="screen-morning-home" class="screen screen-centered" hidden>
+      <div class="complete-card">
+        <div class="morning-home-icon">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#E8956D" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="4"/>
+            <line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+            <line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+          </svg>
+        </div>
+        <div class="complete-text">
+          <h2>Your morning<br>is set.</h2>
+          <p class="complete-day">See you this evening for your check-in.</p>
+        </div>
+      </div>
+      <div class="morning-home-actions">
+        <button id="startEveningBtn" class="btn-primary">Evening Reflection</button>
+        <button id="skipEveningBtn" class="btn-ghost">Skip for today</button>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════
+         7. EVENING — Emoji mood
+    ══════════════════════════════════════════ -->
+    <div id="screen-evening-emoji" class="screen screen-evening" hidden>
+      <header class="evening-header">
+        <span class="evening-title">Evening Reflection</span>
+      </header>
+      <main class="evening-main">
+        <h2 class="evening-question">How are you feeling<br>right now?</h2>
+        <div id="emojiGrid" class="emoji-grid">
+          <button class="emoji-btn" data-emoji="calm"        data-label="CALM">😌</button>
+          <button class="emoji-btn" data-emoji="content"     data-label="CONTENT">😊</button>
+          <button class="emoji-btn" data-emoji="anxious"     data-label="ANXIOUS">😰</button>
+          <button class="emoji-btn" data-emoji="tired"       data-label="TIRED">😴</button>
+          <button class="emoji-btn" data-emoji="overwhelmed" data-label="OVERWHELMED">😵‍💫</button>
+          <button class="emoji-btn" data-emoji="neutral"     data-label="NEUTRAL">😐</button>
+          <button class="emoji-btn" data-emoji="positive"    data-label="POSITIVE">🙂</button>
+        </div>
+      </main>
+      <div class="evening-footer">
+        <button id="emojiNextBtn" class="btn-primary" disabled>Next</button>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════
+         8. EVENING — Intensity slider
+    ══════════════════════════════════════════ -->
+    <div id="screen-evening-slider" class="screen screen-evening" hidden>
+      <header class="evening-header">
+        <span class="evening-title">Evening Reflection</span>
+      </header>
+      <main class="evening-main">
+        <h2 class="evening-question">How intense is<br>this feeling?</h2>
+        <div class="slider-wrap">
+          <div class="slider-ticks">
+            <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span>
+          </div>
+          <input id="intensitySlider" type="range" min="1" max="5" value="3" class="intensity-slider" />
+          <div class="slider-labels">
+            <span>VERY LOW</span><span>VERY HIGH</span>
+          </div>
+        </div>
+        <p class="slider-hint">Notice how the energy moves through you<br>without judgment.</p>
+      </main>
+      <div class="evening-footer">
+        <button id="sliderNextBtn" class="btn-primary">Next</button>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════
+         9. EVENING — Optional text
+    ══════════════════════════════════════════ -->
+    <div id="screen-evening-text" class="screen screen-evening" hidden>
+      <header class="evening-header">
+        <span class="evening-title">Evening Reflection</span>
+      </header>
+      <main class="evening-main">
+        <h2 class="evening-question">Anything behind<br>that feeling?</h2>
+        <textarea id="eveningTextInput" class="evening-textarea" placeholder="Optional — jot a few words to Save…" rows="4"></textarea>
+      </main>
+      <div class="evening-footer evening-footer--split">
+        <button id="skipTextBtn" class="btn-secondary">Skip</button>
+        <button id="submitEveningBtn" class="btn-primary">Submit</button>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════
+         10. EVENING COMPLETE
+    ══════════════════════════════════════════ -->
+    <div id="screen-evening-complete" class="screen screen-centered" hidden>
+      <div class="blob blob--orange"></div>
+      <div class="blob blob--blue"></div>
+      <div class="complete-card">
+        <div class="complete-icon-ring">
+          <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#E8956D" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/>
+          </svg>
+        </div>
+        <div class="complete-text">
+          <h2>See you tomorrow<br>morning.</h2>
+          <p class="complete-day">Rest well.</p>
+        </div>
+      </div>
+      <button id="eveningDoneBtn" class="btn-primary complete-cta">Done</button>
     </div>
 
     <script type="module" src="/app.js"></script>

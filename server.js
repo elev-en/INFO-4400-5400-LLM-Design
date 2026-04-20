@@ -5,10 +5,9 @@ import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypt
 import { sql, initDb } from "./db.js";
 
 const PORT = process.env.PORT || 3000;
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const MODEL = process.env.OPENAI_CHAT_MODEL || "gpt-4.1-mini";
-const TRANSCRIPTION_MODEL =
-  process.env.OPENAI_TRANSCRIPTION_MODEL || "gpt-4o-mini-transcribe";
+const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
+const MODEL = process.env.GOOGLE_CHAT_MODEL || "gemini-2.0-flash";
+const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 const AUDIO_DIR = join(process.cwd(), "data", "audio");
 const openingQuestion = "How is your morning going so far?";
 
@@ -70,6 +69,11 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === "POST" && url.pathname === "/api/evening") {
+      await handleEvening(req, res);
+      return;
+    }
+
     sendJson(res, 404, { error: "Not found" });
   } catch (error) {
     console.error(error);
@@ -78,6 +82,7 @@ const server = createServer(async (req, res) => {
 });
 
 await initDb();
+console.log("[db] tables ready");
 await mkdir(AUDIO_DIR, { recursive: true });
 server.listen(PORT, () => {
   console.log(`Morning check-in app running at http://localhost:${PORT}`);
@@ -105,8 +110,8 @@ async function serveStatic(pathname, res) {
 
 // ─── Chat ─────────────────────────────────────────────────────
 async function handleChat(req, res) {
-  if (!OPENAI_API_KEY) {
-    sendJson(res, 500, { error: "Missing OPENAI_API_KEY environment variable." });
+  if (!GOOGLE_API_KEY) {
+    sendJson(res, 500, { error: "Missing GOOGLE_API_KEY environment variable." });
     return;
   }
 
@@ -210,6 +215,7 @@ async function handleChat(req, res) {
 
 // ─── Register ─────────────────────────────────────────────────
 async function handleRegister(req, res) {
+  console.log("[register] called");
   const body = await readJsonBody(req);
   const username = normalizeUsername(body?.username);
   const password = body?.password;
@@ -228,7 +234,7 @@ async function handleRegister(req, res) {
     return;
   }
 
-  const user = buildUser(username, password);
+  const user = buildUser(username, password.toLowerCase());
 
   await sql`
     INSERT INTO users (id, username, password_hash, password_salt, created_at)
@@ -237,11 +243,12 @@ async function handleRegister(req, res) {
 
   await logEvent("user_registered", null, user.id, user.username, {});
 
-  sendJson(res, 200, { user: { id: user.id, username: user.username } });
+  sendJson(res, 200, { user: { id: user.id, username: user.username }, dayNumber: 1 });
 }
 
 // ─── Login ────────────────────────────────────────────────────
 async function handleLogin(req, res) {
+  console.log("[login] called");
   const body = await readJsonBody(req);
   const username = normalizeUsername(body?.username);
   const password = body?.password;
@@ -255,14 +262,21 @@ async function handleLogin(req, res) {
     SELECT * FROM users WHERE username = ${username}
   `;
 
-  if (!user || !verifyPassword(password, user.password_hash, user.password_salt)) {
+  if (!user || !verifyPassword(password.toLowerCase(), user.password_hash, user.password_salt)) {
     sendJson(res, 401, { error: "Invalid username or password." });
     return;
   }
 
   await logEvent("user_logged_in", null, user.id, user.username, {});
 
-  sendJson(res, 200, { user: { id: user.id, username: user.username } });
+  const [{ count }] = await sql`
+    SELECT COUNT(*)::int AS count FROM sessions WHERE user_id = ${user.id}
+  `;
+
+  sendJson(res, 200, {
+    user: { id: user.id, username: user.username },
+    dayNumber: count + 1
+  });
 }
 
 // ─── Create session ───────────────────────────────────────────
@@ -279,20 +293,57 @@ async function handleSession(req, res) {
   const sessionId = randomUUID();
   const openedAt = new Date().toISOString();
 
+  const [{ count }] = await sql`
+    SELECT COUNT(*)::int AS count FROM sessions WHERE user_id = ${userId}
+  `;
+  const dayNumber = count + 1;
+
   await sql`
-    INSERT INTO sessions (id, user_id, username, user_agent, opened_at)
+    INSERT INTO sessions (id, user_id, username, user_agent, opened_at, day_number)
     VALUES (
       ${sessionId}, ${userId}, ${username},
-      ${body?.userAgent ?? null}, ${openedAt}
+      ${body?.userAgent ?? null}, ${openedAt}, ${dayNumber}
     )
   `;
 
   await logEvent("app_opened", sessionId, userId, username, {
     openedAt,
+    dayNumber,
     userAgent: body?.userAgent ?? null
   });
 
-  sendJson(res, 200, { sessionId });
+  sendJson(res, 200, { sessionId, dayNumber });
+}
+
+// ─── Evening check-in ─────────────────────────────────────────
+async function handleEvening(req, res) {
+  const body = await readJsonBody(req);
+  const { sessionId, emoji, intensity, reflection } = body ?? {};
+
+  if (!sessionId || !emoji || intensity == null) {
+    sendJson(res, 400, { error: "sessionId, emoji, and intensity are required." });
+    return;
+  }
+
+  const [session] = await sql`SELECT * FROM sessions WHERE id = ${sessionId}`;
+  if (!session) {
+    sendJson(res, 404, { error: "Unknown sessionId." });
+    return;
+  }
+
+  await sql`
+    INSERT INTO evening_checkins
+      (session_id, user_id, username, day_number, emoji, intensity, reflection)
+    VALUES
+      (${sessionId}, ${session.user_id}, ${session.username},
+       ${session.day_number}, ${emoji}, ${intensity}, ${reflection ?? null})
+  `;
+
+  await logEvent("evening_checkin_submitted", sessionId, session.user_id, session.username, {
+    emoji, intensity, reflection: reflection ?? null
+  });
+
+  sendJson(res, 200, { ok: true });
 }
 
 // ─── Start session (opening question) ────────────────────────
@@ -335,54 +386,61 @@ async function handleSessionStart(req, res) {
   sendJson(res, 200, { openingQuestion, questionAskedAt: askedAt });
 }
 
-// ─── OpenAI helpers ───────────────────────────────────────────
+// ─── Gemini helpers ───────────────────────────────────────────
 async function transcribeAudio(base64Audio, mimeType) {
-  const bytes = Buffer.from(base64Audio, "base64");
-  const extension = mimeType.includes("wav") ? "wav" : "webm";
-  const form = new FormData();
-  form.append(
-    "file",
-    new Blob([bytes], { type: mimeType }),
-    `recording.${extension}`
+  const response = await fetch(
+    `${GEMINI_BASE}/${MODEL}:generateContent?key=${GOOGLE_API_KEY}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{
+          role: "user",
+          parts: [
+            { inline_data: { mime_type: mimeType, data: base64Audio } },
+            { text: "Transcribe the audio exactly as spoken. Return only the transcription, no commentary." }
+          ]
+        }]
+      })
+    }
   );
-  form.append("model", TRANSCRIPTION_MODEL);
-
-  const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${OPENAI_API_KEY}` },
-    body: form
-  });
 
   if (!response.ok) {
     throw new Error(`Transcription failed: ${await response.text()}`);
   }
 
   const data = await response.json();
-  return data.text?.trim() || "";
+  return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
 }
 
 async function generateReply(messages, transcript) {
-  const conversation = [
-    { role: "system", content: systemPrompt },
-    ...messages,
-    { role: "user", content: transcript }
+  const contents = [
+    ...messages.map((m) => ({
+      role: m.role === "assistant" ? "model" : "user",
+      parts: [{ text: m.content }]
+    })),
+    { role: "user", parts: [{ text: transcript }] }
   ];
 
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${OPENAI_API_KEY}`
-    },
-    body: JSON.stringify({ model: MODEL, temperature: 0.8, messages: conversation })
-  });
+  const response = await fetch(
+    `${GEMINI_BASE}/${MODEL}:generateContent?key=${GOOGLE_API_KEY}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: systemPrompt }] },
+        contents,
+        generationConfig: { temperature: 0.8 }
+      })
+    }
+  );
 
   if (!response.ok) {
     throw new Error(`Chat completion failed: ${await response.text()}`);
   }
 
   const data = await response.json();
-  return data.choices?.[0]?.message?.content?.trim() || "";
+  return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
 }
 
 // ─── Utilities ────────────────────────────────────────────────

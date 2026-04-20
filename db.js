@@ -28,10 +28,16 @@ export async function initDb() {
       username               TEXT        NOT NULL,
       user_agent             TEXT,
       opened_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      day_number             INTEGER     NOT NULL DEFAULT 1,
       turn_count             INTEGER     NOT NULL DEFAULT 0,
       last_question_asked_at TIMESTAMPTZ,
       last_question_text     TEXT
     )
+  `;
+
+  // Add day_number to existing deployments that predate this column
+  await sql`
+    ALTER TABLE sessions ADD COLUMN IF NOT EXISTS day_number INTEGER NOT NULL DEFAULT 1
   `;
 
   await sql`
@@ -55,6 +61,20 @@ export async function initDb() {
       failed                BOOLEAN     NOT NULL DEFAULT FALSE,
       error_message         TEXT,
       created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS evening_checkins (
+      id           SERIAL      PRIMARY KEY,
+      session_id   TEXT        NOT NULL REFERENCES sessions(id),
+      user_id      TEXT        NOT NULL,
+      username     TEXT        NOT NULL,
+      day_number   INTEGER     NOT NULL,
+      emoji        TEXT        NOT NULL,
+      intensity    INTEGER     NOT NULL,
+      reflection   TEXT,
+      submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `;
 
