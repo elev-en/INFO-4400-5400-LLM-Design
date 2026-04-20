@@ -618,8 +618,16 @@ async function sendRecording() {
       questionText: currentQuestion, recordingStartedAt
     });
 
-    conversation.push({ role: "user",      content: data.transcript });
-    appendBubble("user",      data.transcript);
+    // 1. Show user's transcript immediately
+    conversation.push({ role: "user", content: data.transcript });
+    appendBubble("user", data.transcript);
+
+    // 2. Show typing indicator while "assistant is thinking"
+    const typingEl = appendTypingIndicator();
+    await new Promise(r => setTimeout(r, 700));
+    typingEl.remove();
+
+    // 3. Show assistant reply
     conversation.push({ role: "assistant", content: data.reply });
     appendBubble("assistant", data.reply);
 
@@ -781,6 +789,19 @@ function resetWelcome() {
 }
 
 // ─── Render bubble ───────────────────────────────────────────
+function appendTypingIndicator() {
+  const el = document.createElement("div");
+  el.className = "chat-bubble assistant";
+  el.innerHTML = `
+    <div class="bubble-body">
+      <span class="typing-dots"><span></span><span></span><span></span></span>
+    </div>
+  `;
+  chatLog.appendChild(el);
+  chatLog.scrollTop = chatLog.scrollHeight;
+  return el;
+}
+
 function appendBubble(role, text) {
   const time = new Date().toLocaleTimeString("en-US", { hour:"numeric", minute:"2-digit" });
   const el   = document.createElement("div");

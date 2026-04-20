@@ -42,11 +42,9 @@ PORT=3000
 
 > Use the pooler URL (`aws-0-*.pooler.supabase.com`) — the direct `db.*.supabase.co` hostname can fail DNS resolution.
 
-**`GOOGLE_API_KEY`**
-1. Go to [aistudio.google.com](https://aistudio.google.com) → **Get API key**
-2. Create a key and copy it
-
-**`GOOGLE_CHAT_MODEL`** — optional, defaults to `gemini-2.0-flash`
+**`GROQ_API_KEY`**
+1. Go to [console.groq.com](https://console.groq.com) → **API Keys** → **Create API Key**
+2. Copy the key — it starts with `gsk_`
 
 **`PORT`** — optional, defaults to `3000`
 

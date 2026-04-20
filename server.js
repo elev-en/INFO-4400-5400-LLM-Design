@@ -5,9 +5,10 @@ import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypt
 import { sql, initDb } from "./db.js";
 
 const PORT = process.env.PORT || 3000;
-const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
-const MODEL = process.env.GOOGLE_CHAT_MODEL || "gemini-2.0-flash";
-const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
+const GROQ_BASE = "https://api.groq.com/openai/v1";
+const CHAT_MODEL = "llama-3.3-70b-versatile";
+const TRANSCRIPTION_MODEL = "whisper-large-v3";
 const AUDIO_DIR = join(process.cwd(), "data", "audio");
 const openingQuestion = "How is your morning going so far?";
 
@@ -80,7 +81,7 @@ const server = createServer(async (req, res) => {
     sendJson(res, 404, { error: "Not found" });
   } catch (error) {
     console.error(error);
-    sendJson(res, 500, { error: "Internal server error" });
+    sendJson(res, 500, { error: error.message || "Internal server error" });
   }
 });
 
@@ -113,8 +114,8 @@ async function serveStatic(pathname, res) {
 
 // ─── Chat ─────────────────────────────────────────────────────
 async function handleChat(req, res) {
-  if (!GOOGLE_API_KEY) {
-    sendJson(res, 500, { error: "Missing GOOGLE_API_KEY environment variable." });
+  if (!GROQ_API_KEY) {
+    sendJson(res, 500, { error: "Missing GROQ_API_KEY environment variable." });
     return;
   }
 
@@ -427,65 +428,60 @@ async function handleSessionStart(req, res) {
   sendJson(res, 200, { openingQuestion, questionAskedAt: askedAt });
 }
 
-// ─── Gemini helpers ───────────────────────────────────────────
+// ─── Groq helpers ────────────────────────────────────────────
 async function transcribeAudio(base64Audio, mimeType) {
-  const response = await fetch(
-    `${GEMINI_BASE}/${MODEL}:generateContent?key=${GOOGLE_API_KEY}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{
-          role: "user",
-          parts: [
-            { inline_data: { mime_type: mimeType, data: base64Audio } },
-            { text: "Transcribe the audio exactly as spoken. Return only the transcription, no commentary." }
-          ]
-        }]
-      })
-    }
-  );
+  const extension = mimeType.includes("wav") ? "wav" : "webm";
+  const audioBuffer = Buffer.from(base64Audio, "base64");
+
+  const form = new FormData();
+  form.append("file", new Blob([audioBuffer], { type: mimeType }), `audio.${extension}`);
+  form.append("model", TRANSCRIPTION_MODEL);
+  form.append("response_format", "text");
+
+  const response = await fetch(`${GROQ_BASE}/audio/transcriptions`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${GROQ_API_KEY}` },
+    body: form
+  });
 
   if (!response.ok) {
     throw new Error(`Transcription failed: ${await response.text()}`);
   }
 
-  const data = await response.json();
-  return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
+  return (await response.text()).trim();
 }
 
 async function generateReply(messages, transcript, isFinalTurn = false) {
-  const contents = [
-    ...messages.map((m) => ({
-      role: m.role === "assistant" ? "model" : "user",
-      parts: [{ text: m.content }]
-    })),
-    { role: "user", parts: [{ text: transcript }] }
-  ];
-
   const effectivePrompt = isFinalTurn
     ? systemPrompt + "\n\nThis is the final turn of the session. Do NOT ask a follow-up question. Instead, warmly wrap up the conversation in 1-2 sentences, thanking them for sharing and wishing them a good morning."
     : systemPrompt;
 
-  const response = await fetch(
-    `${GEMINI_BASE}/${MODEL}:generateContent?key=${GOOGLE_API_KEY}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: effectivePrompt }] },
-        contents,
-        generationConfig: { temperature: 0.8 }
-      })
-    }
-  );
+  const chatMessages = [
+    { role: "system", content: effectivePrompt },
+    ...messages.map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.content })),
+    { role: "user", content: transcript }
+  ];
+
+  const response = await fetch(`${GROQ_BASE}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${GROQ_API_KEY}`
+    },
+    body: JSON.stringify({
+      model: CHAT_MODEL,
+      messages: chatMessages,
+      temperature: 0.8,
+      max_tokens: 256
+    })
+  });
 
   if (!response.ok) {
     throw new Error(`Chat completion failed: ${await response.text()}`);
   }
 
   const data = await response.json();
-  return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
+  return data.choices?.[0]?.message?.content?.trim() || "";
 }
 
 // ─── Utilities ────────────────────────────────────────────────
