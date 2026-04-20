@@ -1,44 +1,157 @@
-# Morning Mirror
+# Morning Reflection — Setup Guide
 
-Morning Mirror is a minimal chat system with an LLM agent that opens by asking how your morning is going, accepts a voice recording, transcribes it, and responds with a follow-up question.
+A voice-based morning check-in app for research study participants. Participants record short audio responses to guided questions each morning and optionally complete an evening mood check-in.
 
-## What it does
+---
 
-- Starts the conversation with a morning check-in prompt.
-- Supports per-user sign up and login.
-- Records the user's answer in the browser with `MediaRecorder`.
-- Sends the audio to a Node server.
-- Uses the OpenAI transcription API to turn the recording into text.
-- Sends the transcript and prior chat history to an OpenAI chat model.
-- Logs which user opened the app, when each question is asked, how long the user takes to respond, and which audio file was saved for that response.
+## Prerequisites
 
-## Run it
+- [Node.js](https://nodejs.org/) v18 or later
+- A [Supabase](https://supabase.com) project (free tier works)
+- A [Google AI Studio](https://aistudio.google.com) API key with access to Gemini
 
-1. Make sure you are using a recent version of Node.js with built-in `fetch`, `Blob`, and `FormData`.
-2. Export your API key:
+---
 
-   ```bash
-   export OPENAI_API_KEY=your_key_here
-   ```
-
-3. Start the app:
-
-   ```bash
-   npm start
-   ```
-
-4. Open `http://localhost:3000`.
-
-## Logging output
-
-- Session events are appended to `data/logs/session-events.jsonl`.
-- Audio recordings are saved in `data/audio/`.
-- Registered users are stored in `data/users.json`.
-- Each log row includes user identity, session id, timestamps, response latency, transcript, and the saved recording filename.
-
-## Optional model overrides
+## 1. Clone and install
 
 ```bash
-export OPENAI_CHAT_MODEL=gpt-4.1-mini
-export OPENAI_TRANSCRIPTION_MODEL=gpt-4o-mini-transcribe
+git clone <repo-url>
+cd INFO-4400-5400-LLM-Design
+npm install
 ```
+
+---
+
+## 2. Environment variables
+
+Create a `.env` file in the project root (never commit this file):
+
+```
+DATABASE_URL=postgresql://postgres.[ref]:[password]@aws-0-us-east-1.pooler.supabase.com:5432/postgres
+GOOGLE_API_KEY=AIzaSy...
+GOOGLE_CHAT_MODEL=gemini-2.0-flash
+PORT=3000
+```
+
+### Getting each value
+
+**`DATABASE_URL`**
+1. Go to your Supabase project → **Project Settings** → **Database**
+2. Under **Connection string**, select **Session mode** (port 5432)
+3. Copy the full URL and replace `[YOUR-PASSWORD]` with your database password
+
+> Use the pooler URL (`aws-0-*.pooler.supabase.com`) — the direct `db.*.supabase.co` hostname can fail DNS resolution.
+
+**`GOOGLE_API_KEY`**
+1. Go to [aistudio.google.com](https://aistudio.google.com) → **Get API key**
+2. Create a key and copy it
+
+**`GOOGLE_CHAT_MODEL`** — optional, defaults to `gemini-2.0-flash`
+
+**`PORT`** — optional, defaults to `3000`
+
+---
+
+## 3. Run the app
+
+```bash
+npm start
+```
+
+The server will:
+- Connect to the database and create all tables automatically on first run
+- Start at `http://localhost:3000`
+
+---
+
+## App flow
+
+### Morning reflection
+- Opens daily, **closes at 12:00 PM**
+- If a participant hasn't recorded by noon, the home screen shows a locked state ("See you tomorrow")
+- The session ends automatically after **10 questions** or **10 minutes**, whichever comes first
+- Manually ending early via "Conclude reflection" also counts as complete
+
+### Evening reflection
+- Available from **9:00 PM** the same day until **7:00 AM** the following morning
+- Only unlocked if the participant completed their morning reflection that day
+
+### Participant IDs
+- Participants either enter an existing ID or generate a new one (`P-XXXX`)
+- The ID is also the password — no separate credential needed
+- Day number is tracked server-side; participants can use any device
+
+---
+
+## Dev mode
+
+Append `?dev=1` to the URL to enable the developer side panel:
+
+```
+http://localhost:3000/?dev=1
+```
+
+A **DEV** tab appears on the right edge of the screen. Click it to open the panel.
+
+### Mock Date & Time
+
+Override the current date and/or time to test time-gated behaviour without waiting:
+
+| Time set | Effect |
+|---|---|
+| Before 12:00 PM | Morning home — Record button active |
+| After 12:00 PM | Morning home — Locked ("See you tomorrow") |
+| 9:00 PM – 7:00 AM | Morning home — Evening button unlocked |
+| Outside that window | Morning home — Evening button shows opening time |
+
+Click **↺** next to either field to reset it back to the real clock.
+
+### Morning completion toggle
+
+Toggles `morningCompleted` between done and not done without going through the full chat flow.
+
+- **Morning: not done** — home screen locks after noon; evening emoji shows a locked state
+- **Morning: done ✓** — evening flow is accessible (subject to the time window above)
+
+### Jump to screen
+
+Instantly navigate to any screen in the app:
+
+| Button | Notes |
+|---|---|
+| Welcome | Login / register screen |
+| Home | Morning recording home |
+| Chat | Auto-creates a dev session if none exists |
+| Morning Done | Completion confirmation screen |
+| Morning Home | Sets morning session date to now; respects morning toggle for evening button |
+| Evening Emoji | Shows locked or active state based on morning toggle |
+| Ev. Slider | Intensity slider |
+| Ev. Text | Optional reflection text |
+| Ev. Complete | Final evening screen |
+
+---
+
+## Project structure
+
+```
+├── server.js          # HTTP server, API routes, Gemini integration
+├── db.js              # PostgreSQL connection and schema setup
+├── public/
+│   ├── index.html     # Single-page app, all 10 screens
+│   ├── app.js         # Frontend logic and state
+│   └── styles.css     # All styles including dev panel
+├── data/
+│   └── audio/         # Saved audio recordings (created automatically)
+├── .env               # Environment variables (do not commit)
+└── .env.example       # Template for required variables
+```
+
+## Database tables
+
+| Table | Purpose |
+|---|---|
+| `users` | Participant accounts |
+| `sessions` | One row per daily morning session |
+| `turns` | Each recorded response within a session, including audio |
+| `evening_checkins` | Evening mood, intensity, and optional reflection |
+| `events` | Audit log of key app events |
