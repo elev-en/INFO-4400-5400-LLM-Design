@@ -651,7 +651,8 @@ function handleConclude() {
 
 // ─── Morning window gating ───────────────────────────────────
 function isMorningWindowOpen() {
-  return getNow().getHours() < 12;
+  const h = getNow().getHours();
+  return h >= 7 && h < 12;
 }
 
 // ─── Evening window gating ───────────────────────────────────

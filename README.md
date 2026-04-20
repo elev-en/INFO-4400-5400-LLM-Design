@@ -67,8 +67,8 @@ The server will:
 ## App flow
 
 ### Morning reflection
-- Opens daily, **closes at 12:00 PM**
-- If a participant hasn't recorded by noon, the home screen shows a locked state ("See you tomorrow")
+- Open daily **7:00 AM – 12:00 PM**
+- Outside that window, the home screen shows a locked state ("See you tomorrow")
 - The session ends automatically after **10 questions** or **10 minutes**, whichever comes first
 - Manually ending early via "Conclude reflection" also counts as complete
 
@@ -85,11 +85,28 @@ The server will:
 
 ## Dev mode
 
-Append `?dev=1` to the URL to enable the developer side panel:
+Append `?dev=1` to the URL to enable the developer side panel.
 
+**Local:**
 ```
 http://localhost:3000/?dev=1
 ```
+
+**GitHub Codespaces:**
+
+Codespaces forwards the port to a URL like:
+```
+https://<codespace-name>-3000.app.github.dev/
+```
+To find yours:
+1. In VS Code, open the **Ports** tab (bottom panel)
+2. Find port `3000` and click the globe icon to open it in the browser
+3. Append `?dev=1` to that URL:
+```
+https://<codespace-name>-3000.app.github.dev/?dev=1
+```
+
+> If the Ports tab shows port 3000 as private, right-click it and set visibility to **Public** so the browser can load it without authentication errors.
 
 A **DEV** tab appears on the right edge of the screen. Click it to open the panel.
 
@@ -99,8 +116,8 @@ Override the current date and/or time to test time-gated behaviour without waiti
 
 | Time set | Effect |
 |---|---|
-| Before 12:00 PM | Morning home — Record button active |
-| After 12:00 PM | Morning home — Locked ("See you tomorrow") |
+| 7:00 AM – 12:00 PM | Morning home — Record button active |
+| Before 7:00 AM or after 12:00 PM | Morning home — Locked ("See you tomorrow") |
 | 9:00 PM – 7:00 AM | Morning home — Evening button unlocked |
 | Outside that window | Morning home — Evening button shows opening time |
 
