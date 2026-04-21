@@ -53,7 +53,8 @@ const processingArea  = document.getElementById("processingArea");
 const hiddenAudio     = document.getElementById("hiddenAudio");
 // Morning complete
 const morningDayText  = document.getElementById("morningDayText");
-const goToMorningHomeBtn = document.getElementById("goToMorningHomeBtn");
+const goToMorningHomeBtn    = document.getElementById("goToMorningHomeBtn");
+const morningHomeSubtitle   = document.getElementById("morningHomeSubtitle");
 // Morning home
 const startEveningBtn = document.getElementById("startEveningBtn");
 const skipEveningBtn  = document.getElementById("skipEveningBtn");
@@ -429,7 +430,10 @@ async function handleGenerateId() {
       setDayNumber(1);
       revealedId.textContent = id.toUpperCase();
       showScreen("idReveal");
-      gotItBtn.addEventListener("click", launchLockedHome, { once: true });
+      const afterReveal = isEveningWindowOpen(new Date())
+        ? () => { morningSessionDate = new Date(); showMorningHome(); }
+        : launchLockedHome;
+      gotItBtn.addEventListener("click", afterReveal, { once: true });
     } catch (err) {
       showMsg(err.message);
       generateIdBtn.disabled = false;
@@ -507,12 +511,13 @@ function launchHome() {
 function launchLockedHome() {
   conversation.length = 0;
   chatLog.innerHTML   = "";
-  homeGreeting.textContent   = "See you tomorrow.";
+  homeGreeting.textContent   = "Nothing open right now.";
   homeIntro.hidden           = true;
   homeDeadline.hidden        = true;
+  homeLockMsg.textContent    = "Evening reflection opens at 9:00 PM tonight.";
   homeLockMsg.hidden         = false;
   startRecordBtn.disabled    = true;
-  startRecordBtn.textContent = "Closed";
+  startRecordBtn.textContent = "Opens at 9:00 PM";
   showScreen("home");
 }
 
@@ -697,6 +702,14 @@ function msUntilEveningOpen(date) {
 
 function showMorningHome() {
   clearTimeout(eveningWindowTimer);
+
+  // Update subtitle based on whether morning was completed
+  if (morningCompleted) {
+    morningHomeSubtitle.textContent = "Evening reflection is available tonight.";
+  } else {
+    morningHomeSubtitle.textContent = "Evening reflection is now open.";
+  }
+
   showScreen("morningHome");
 
   const date = morningSessionDate || new Date();

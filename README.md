@@ -52,9 +52,16 @@ PORT=3000
 
 ## 3. Run the app
 
+**Locally:**
 ```bash
 npm start
 ```
+
+**Production (Render/Railway):**
+```bash
+npm run start:prod
+```
+Set environment variables through the platform dashboard instead of a `.env` file.
 
 The server will:
 - Connect to the database and create all tables automatically on first run

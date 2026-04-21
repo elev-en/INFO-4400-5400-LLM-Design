@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node --env-file=.env server.js"
+    "start": "node --env-file=.env server.js",
+    "start:prod": "node server.js"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.2",
