@@ -665,9 +665,9 @@ async function sendRecording() {
       questionText: currentQuestion, recordingStartedAt
     });
 
-    // 1. Show user's transcript immediately
+    // 1. Show user response bubble with collapsible transcript
     conversation.push({ role: "user", content: data.transcript });
-    appendBubble("user", data.transcript);
+    appendUserBubble(data.transcript);
 
     // 2. Show typing indicator while "assistant is thinking"
     const typingEl = appendTypingIndicator();
@@ -849,6 +849,31 @@ function appendTypingIndicator() {
   chatLog.appendChild(el);
   chatLog.scrollTop = chatLog.scrollHeight;
   return el;
+}
+
+function appendUserBubble(transcript) {
+  const time = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  const el = document.createElement("div");
+  el.className = "chat-bubble user";
+  el.innerHTML = `
+    <div class="bubble-body user-body">
+      <div class="transcript-header">
+        <span class="transcript-label">Your response</span>
+        <button class="transcript-toggle" aria-expanded="false">Show transcript</button>
+      </div>
+      <p class="transcript-text" hidden>${escapeHtml(transcript)}</p>
+    </div>
+    <span class="bubble-time">${time}</span>
+  `;
+  el.querySelector(".transcript-toggle").addEventListener("click", function () {
+    const text = el.querySelector(".transcript-text");
+    const expanded = this.getAttribute("aria-expanded") === "true";
+    text.hidden = expanded;
+    this.setAttribute("aria-expanded", String(!expanded));
+    this.textContent = expanded ? "Show transcript" : "Hide transcript";
+  });
+  chatLog.appendChild(el);
+  chatLog.scrollTop = chatLog.scrollHeight;
 }
 
 function appendBubble(role, text) {
