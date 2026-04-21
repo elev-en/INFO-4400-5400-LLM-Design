@@ -339,7 +339,8 @@ async function handleLogin(req, res) {
     todayDayNumber:          morningDoneToday ? todaySession.day_number : null,
     todayOpenedAt:           morningDoneToday ? todaySession.opened_at  : null,
     pendingEveningSessionId,
-    pendingEveningOpenedAt
+    pendingEveningOpenedAt,
+    hadSessionYesterday:     !!yesterdaySession
   });
 }
 

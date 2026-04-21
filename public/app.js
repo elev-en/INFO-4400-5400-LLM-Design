@@ -389,23 +389,28 @@ async function handleStartStudy() {
     // Returning user who already completed both morning and evening today
     if (data.morningDoneToday && data.eveningDoneToday) {
       setDayNumber(data.todayDayNumber);
-      showMsg("You've completed today's reflection. See you tomorrow morning!", "success");
-      startStudyBtn.disabled = false;
-      startStudyBtn.textContent = "Continue study";
+      launchLockedHome();
       return;
     }
 
     // Morning window has closed for today without a completed session
     if (!isMorningWindowOpen()) {
       setDayNumber(data.dayNumber ?? 1);
-      // Overnight case: yesterday had a session with no evening check-in yet
+      // During 12am–7am the active evening window started yesterday, so use yesterday as base
+      const now = getNow();
+      const h = now.getHours();
+      const eveningBaseDate = (h >= 0 && h < 7)
+        ? new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1)
+        : now;
+      // Prefer linking to a specific session if one exists from yesterday
       if (data.pendingEveningOpenedAt && isEveningWindowOpen(new Date(data.pendingEveningOpenedAt))) {
+        // Yesterday had a session with evening not yet done
         sessionId = data.pendingEveningSessionId || null;
         morningSessionDate = new Date(data.pendingEveningOpenedAt);
         showMorningHome();
-      } else if (isEveningWindowOpen(new Date())) {
-        // Tonight's evening window (9pm–midnight)
-        morningSessionDate = new Date();
+      } else if (!data.hadSessionYesterday && isEveningWindowOpen(eveningBaseDate)) {
+        // No session at all yesterday (e.g. day 1) — still offer evening check-in
+        morningSessionDate = eveningBaseDate;
         showMorningHome();
       } else {
         launchLockedHome();
@@ -516,13 +521,26 @@ function launchHome() {
 function launchLockedHome() {
   conversation.length = 0;
   chatLog.innerHTML   = "";
+  const h = getNow().getHours();
+  let lockMsg, btnLabel;
+  if (h >= 0 && h < 7) {
+    lockMsg  = "Morning reflection opens at 7:00 AM.";
+    btnLabel = "Opens at 7:00 AM";
+  } else if (h >= 12 && h < 21) {
+    lockMsg  = "Evening reflection opens at 9:00 PM tonight.";
+    btnLabel = "Opens at 9:00 PM";
+  } else {
+    // 9pm–midnight after evening is done, or edge cases
+    lockMsg  = "Morning reflection opens at 7:00 AM tomorrow.";
+    btnLabel = "Opens at 7:00 AM";
+  }
   homeGreeting.textContent   = "Nothing open right now.";
   homeIntro.hidden           = true;
   homeDeadline.hidden        = true;
-  homeLockMsg.textContent    = "Evening reflection opens at 9:00 PM tonight.";
+  homeLockMsg.textContent    = lockMsg;
   homeLockMsg.hidden         = false;
   startRecordBtn.disabled    = true;
-  startRecordBtn.textContent = "Opens at 9:00 PM";
+  startRecordBtn.textContent = btnLabel;
   showScreen("home");
 }
 
