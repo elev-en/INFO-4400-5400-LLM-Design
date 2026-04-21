@@ -1,3 +1,8 @@
+// ─── Service worker ──────────────────────────────────────────
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/sw.js").catch(console.error);
+}
+
 // ─── Screen refs ─────────────────────────────────────────────
 const screens = {
   welcome:         document.getElementById("screen-welcome"),
@@ -178,7 +183,7 @@ function mountDevBar() {
   function refreshDevScreens() {
     if (!screens.morningHome.hidden) showMorningHome();
     if (!screens.home.hidden) {
-      if (morningCompleted || isMorningWindowOpen()) launchHome();
+      if (isMorningWindowOpen()) launchHome();
       else launchLockedHome();
     }
   }
@@ -217,7 +222,11 @@ function mountDevBar() {
     morningCompleted = !morningCompleted;
     devMorningToggle.dataset.on = morningCompleted;
     devMorningToggle.textContent = morningCompleted ? "Morning: done ✓" : "Morning: not done";
-    refreshDevScreens();
+    // Only affects home screen lock state, not evening access
+    if (!screens.home.hidden) {
+      if (morningCompleted || isMorningWindowOpen()) launchHome();
+      else launchLockedHome();
+    }
   });
 
   // ── Screen jumps ──────────────────────────────────────────
@@ -388,7 +397,13 @@ async function handleStartStudy() {
     // Morning window has closed for today without a completed session
     if (!isMorningWindowOpen()) {
       setDayNumber(data.dayNumber ?? 1);
-      launchLockedHome();
+      // If it's the evening window, show morning-home so evening is accessible
+      if (isEveningWindowOpen(new Date())) {
+        morningSessionDate = new Date();
+        showMorningHome();
+      } else {
+        launchLockedHome();
+      }
       return;
     }
 
@@ -684,13 +699,6 @@ function showMorningHome() {
   clearTimeout(eveningWindowTimer);
   showScreen("morningHome");
 
-  if (!morningCompleted) {
-    startEveningBtn.disabled = true;
-    startEveningBtn.textContent = "Evening Reflection";
-    startEveningBtn.title = "Complete your morning reflection first.";
-    return;
-  }
-
   const date = morningSessionDate || new Date();
 
   if (isEveningWindowOpen(date)) {
@@ -728,10 +736,9 @@ function showMorningHome() {
 
 // ─── Evening flow ────────────────────────────────────────────
 function showEveningEmoji() {
-  const locked = !morningCompleted;
-  eveningLockedMain.hidden  = !locked;
-  eveningActiveMain.hidden  =  locked;
-  eveningEmojiFooter.hidden =  locked;
+  eveningLockedMain.hidden  = true;
+  eveningActiveMain.hidden  = false;
+  eveningEmojiFooter.hidden = false;
   showScreen("eveningEmoji");
 }
 
@@ -747,7 +754,9 @@ function handleEmojiSelect(e) {
 async function submitEvening(text) {
   try {
     await apiPost("/api/evening", {
-      sessionId,
+      sessionId:  sessionId  ?? undefined,
+      userId:     currentUser?.id,
+      username:   currentUser?.username,
       emoji:      selectedEmoji,
       intensity:  selectedIntensity,
       reflection: text

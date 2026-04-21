@@ -79,6 +79,7 @@ export async function initDb() {
   `;
 
   await sql`ALTER TABLE turns ADD COLUMN IF NOT EXISTS audio_data BYTEA`;
+  await sql`ALTER TABLE evening_checkins ALTER COLUMN session_id DROP NOT NULL`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS events (

@@ -106,9 +106,12 @@ html, body {
   max-width: 402px;
   margin: 0 auto;
   min-height: 100vh;
+  min-height: 100dvh;
   position: relative;
   overflow: hidden;
   background: var(--bg);
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 /* ─── Ambient blobs ─────────────────────────────────────────── */

@@ -1,0 +1,18 @@
+{
+  "name": "Morning Reflection",
+  "short_name": "Reflection",
+  "description": "A daily morning and evening reflection app for research participants.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fff5e8",
+  "theme_color": "#e8956d",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

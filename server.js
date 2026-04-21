@@ -360,16 +360,35 @@ async function handleSession(req, res) {
 // ─── Evening check-in ─────────────────────────────────────────
 async function handleEvening(req, res) {
   const body = await readJsonBody(req);
-  const { sessionId, emoji, intensity, reflection } = body ?? {};
+  const { sessionId, userId, username: rawUsername, emoji, intensity, reflection } = body ?? {};
 
-  if (!sessionId || !emoji || intensity == null) {
-    sendJson(res, 400, { error: "sessionId, emoji, and intensity are required." });
+  if (!emoji || intensity == null) {
+    sendJson(res, 400, { error: "emoji and intensity are required." });
     return;
   }
 
-  const [session] = await sql`SELECT * FROM sessions WHERE id = ${sessionId}`;
-  if (!session) {
-    sendJson(res, 404, { error: "Unknown sessionId." });
+  let resolvedSessionId = sessionId ?? null;
+  let resolvedUserId    = userId ?? null;
+  let resolvedUsername  = normalizeUsername(rawUsername) || null;
+  let resolvedDayNumber = null;
+
+  if (sessionId) {
+    const [session] = await sql`SELECT * FROM sessions WHERE id = ${sessionId}`;
+    if (!session) {
+      sendJson(res, 404, { error: "Unknown sessionId." });
+      return;
+    }
+    resolvedUserId   = session.user_id;
+    resolvedUsername = session.username;
+    resolvedDayNumber = session.day_number;
+  } else if (userId) {
+    // No morning session — look up today's day number from session count
+    const [{ count }] = await sql`
+      SELECT COUNT(*)::int AS count FROM sessions WHERE user_id = ${userId}
+    `;
+    resolvedDayNumber = count > 0 ? count : 1;
+  } else {
+    sendJson(res, 400, { error: "Either sessionId or userId is required." });
     return;
   }
 
@@ -377,11 +396,11 @@ async function handleEvening(req, res) {
     INSERT INTO evening_checkins
       (session_id, user_id, username, day_number, emoji, intensity, reflection)
     VALUES
-      (${sessionId}, ${session.user_id}, ${session.username},
-       ${session.day_number}, ${emoji}, ${intensity}, ${reflection ?? null})
+      (${resolvedSessionId}, ${resolvedUserId}, ${resolvedUsername},
+       ${resolvedDayNumber}, ${emoji}, ${intensity}, ${reflection ?? null})
   `;
 
-  await logEvent("evening_checkin_submitted", sessionId, session.user_id, session.username, {
+  await logEvent("evening_checkin_submitted", resolvedSessionId, resolvedUserId, resolvedUsername, {
     emoji, intensity, reflection: reflection ?? null
   });
 
