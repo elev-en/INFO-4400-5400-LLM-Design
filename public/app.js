@@ -377,7 +377,7 @@ async function handleStartStudy() {
     localStorage.setItem("morning-mirror-user", JSON.stringify(currentUser));
 
     // Returning user who already completed morning today
-    if (data.morningDoneToday && !data.eveningDoneToday) {
+    if (data.morningDoneToday && !data.recentEveningDone) {
       sessionId = data.todaySessionId;
       morningSessionDate = new Date(data.todayOpenedAt);
       morningCompleted = true;
@@ -386,8 +386,8 @@ async function handleStartStudy() {
       return;
     }
 
-    // Returning user who already completed both morning and evening today
-    if (data.morningDoneToday && data.eveningDoneToday) {
+    // Returning user who already completed both morning and evening
+    if (data.morningDoneToday && data.recentEveningDone) {
       setDayNumber(data.todayDayNumber);
       launchLockedHome();
       return;
@@ -402,14 +402,17 @@ async function handleStartStudy() {
       const eveningBaseDate = (h >= 0 && h < 7)
         ? new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1)
         : now;
-      // Prefer linking to a specific session if one exists from yesterday
-      if (data.pendingEveningOpenedAt && isEveningWindowOpen(new Date(data.pendingEveningOpenedAt))) {
-        // Yesterday had a session with evening not yet done
+
+      if (data.recentEveningDone) {
+        // Evening already submitted — nothing open right now
+        launchLockedHome();
+      } else if (data.pendingEveningOpenedAt && isEveningWindowOpen(new Date(data.pendingEveningOpenedAt))) {
+        // Yesterday had a session, evening not yet done
         sessionId = data.pendingEveningSessionId || null;
         morningSessionDate = new Date(data.pendingEveningOpenedAt);
         showMorningHome();
       } else if (!data.hadSessionYesterday && isEveningWindowOpen(eveningBaseDate)) {
-        // No session at all yesterday (e.g. day 1) — still offer evening check-in
+        // No session yesterday (e.g. day 1) — still offer evening check-in
         morningSessionDate = eveningBaseDate;
         showMorningHome();
       } else {

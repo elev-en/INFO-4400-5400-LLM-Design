@@ -301,14 +301,15 @@ async function handleLogin(req, res) {
 
   const morningDoneToday = !!(todaySession && todaySession.turn_count > 0);
 
-  // Check if they already submitted an evening check-in for today's session
-  let eveningDoneToday = false;
-  if (morningDoneToday) {
-    const [ev] = await sql`
-      SELECT id FROM evening_checkins WHERE session_id = ${todaySession.id} LIMIT 1
-    `;
-    eveningDoneToday = !!ev;
-  }
+  // Single check: any evening check-in submitted in the last 10 hours covers the full 9pm–7am window
+  const [recentEv] = await sql`
+    SELECT id FROM evening_checkins
+    WHERE user_id = ${user.id}
+      AND submitted_at >= NOW() - INTERVAL '10 hours'
+    ORDER BY submitted_at DESC
+    LIMIT 1
+  `;
+  const recentEveningDone = !!recentEv;
 
   // Check for yesterday's session with a pending evening check-in (overnight 9pm–7am window)
   let pendingEveningSessionId = null;
@@ -320,21 +321,16 @@ async function handleLogin(req, res) {
     ORDER BY opened_at DESC
     LIMIT 1
   `;
-  if (yesterdaySession) {
-    const [yev] = await sql`
-      SELECT id FROM evening_checkins WHERE session_id = ${yesterdaySession.id} LIMIT 1
-    `;
-    if (!yev) {
-      pendingEveningSessionId = yesterdaySession.id;
-      pendingEveningOpenedAt  = yesterdaySession.opened_at;
-    }
+  if (yesterdaySession && !recentEveningDone) {
+    pendingEveningSessionId = yesterdaySession.id;
+    pendingEveningOpenedAt  = yesterdaySession.opened_at;
   }
 
   sendJson(res, 200, {
     user: { id: user.id, username: user.username },
     dayNumber: count + 1,
     morningDoneToday,
-    eveningDoneToday,
+    recentEveningDone,
     todaySessionId:          morningDoneToday ? todaySession.id        : null,
     todayDayNumber:          morningDoneToday ? todaySession.day_number : null,
     todayOpenedAt:           morningDoneToday ? todaySession.opened_at  : null,
