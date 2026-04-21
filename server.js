@@ -310,14 +310,36 @@ async function handleLogin(req, res) {
     eveningDoneToday = !!ev;
   }
 
+  // Check for yesterday's session with a pending evening check-in (overnight 9pm–7am window)
+  let pendingEveningSessionId = null;
+  let pendingEveningOpenedAt  = null;
+  const [yesterdaySession] = await sql`
+    SELECT id, opened_at FROM sessions
+    WHERE user_id = ${user.id}
+      AND opened_at::date = CURRENT_DATE - INTERVAL '1 day'
+    ORDER BY opened_at DESC
+    LIMIT 1
+  `;
+  if (yesterdaySession) {
+    const [yev] = await sql`
+      SELECT id FROM evening_checkins WHERE session_id = ${yesterdaySession.id} LIMIT 1
+    `;
+    if (!yev) {
+      pendingEveningSessionId = yesterdaySession.id;
+      pendingEveningOpenedAt  = yesterdaySession.opened_at;
+    }
+  }
+
   sendJson(res, 200, {
     user: { id: user.id, username: user.username },
     dayNumber: count + 1,
     morningDoneToday,
     eveningDoneToday,
-    todaySessionId:  morningDoneToday ? todaySession.id         : null,
-    todayDayNumber:  morningDoneToday ? todaySession.day_number  : null,
-    todayOpenedAt:   morningDoneToday ? todaySession.opened_at   : null
+    todaySessionId:          morningDoneToday ? todaySession.id        : null,
+    todayDayNumber:          morningDoneToday ? todaySession.day_number : null,
+    todayOpenedAt:           morningDoneToday ? todaySession.opened_at  : null,
+    pendingEveningSessionId,
+    pendingEveningOpenedAt
   });
 }
 

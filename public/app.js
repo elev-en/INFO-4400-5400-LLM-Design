@@ -398,8 +398,13 @@ async function handleStartStudy() {
     // Morning window has closed for today without a completed session
     if (!isMorningWindowOpen()) {
       setDayNumber(data.dayNumber ?? 1);
-      // If it's the evening window, show morning-home so evening is accessible
-      if (isEveningWindowOpen(new Date())) {
+      // Overnight case: yesterday had a session with no evening check-in yet
+      if (data.pendingEveningOpenedAt && isEveningWindowOpen(new Date(data.pendingEveningOpenedAt))) {
+        sessionId = data.pendingEveningSessionId || null;
+        morningSessionDate = new Date(data.pendingEveningOpenedAt);
+        showMorningHome();
+      } else if (isEveningWindowOpen(new Date())) {
+        // Tonight's evening window (9pm–midnight)
         morningSessionDate = new Date();
         showMorningHome();
       } else {
