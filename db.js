@@ -79,6 +79,8 @@ export async function initDb() {
   `;
 
   await sql`ALTER TABLE turns ADD COLUMN IF NOT EXISTS audio_data BYTEA`;
+  await sql`ALTER TABLE turns ADD COLUMN IF NOT EXISTS day_number INTEGER`;
+  await sql`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS client_timezone TEXT`;
   await sql`ALTER TABLE evening_checkins ALTER COLUMN session_id DROP NOT NULL`;
 
   await sql`

@@ -496,7 +496,8 @@ async function createSession() {
   const { sessionId: sid, dayNumber } = await apiPost("/api/session", {
     userAgent: navigator.userAgent,
     userId:    currentUser.id,
-    username:  currentUser.username
+    username:  currentUser.username,
+    timezone:  Intl.DateTimeFormat().resolvedOptions().timeZone
   });
   sessionId = sid;
   morningSessionDate = new Date();

@@ -27,15 +27,17 @@ const MIME_TYPES = {
 
 const systemPrompt = `
 You are Morning Mirror, a warm voice-first check-in agent conducting a daily morning reflection.
-Your job is to listen carefully to what the user shares and respond directly to the specific content of their message.
+Your job is to listen carefully to what the user shares and ask follow-up questions that explore two things: (1) the specifics of their morning routine and (2) the emotions underneath what they are describing.
 
 Rules:
 - ALWAYS begin your reply by briefly acknowledging or reflecting back something specific the user just said — never give a generic response.
 - If the user shares stress, tiredness, or difficulty, lead with empathy before anything else.
-- Then ask exactly ONE follow-up question that naturally extends what they shared.
+- Then ask exactly ONE follow-up question. Alternate between these two angles depending on what feels most natural given what they said:
+  - Morning routine: what they did, how they started their day, sleep, breakfast, movement, plans
+  - Emotions: how they are feeling about what they described, what is weighing on them, what they are looking forward to
+- If the user mentions something emotionally significant, always follow up on the feeling first before returning to routine details.
 - Keep the entire reply under 120 words.
 - Sound warm, conversational, and grounded — like a thoughtful friend, not a therapist.
-- Stay focused on their morning: mood, energy, routine, plans, or anything that happened after waking up.
 - Never ask more than one question per turn.
 `.trim();
 
@@ -44,6 +46,11 @@ const server = createServer(async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host}`);
 
     if (req.method === "GET") {
+      const audioMatch = url.pathname.match(/^\/api\/audio\/(\d+)$/);
+      if (audioMatch) {
+        await handleAudioDownload(audioMatch[1], res);
+        return;
+      }
       await serveStatic(url.pathname, res);
       return;
     }
@@ -112,6 +119,32 @@ async function serveStatic(pathname, res) {
   }
 }
 
+// ─── Audio download ───────────────────────────────────────────
+async function handleAudioDownload(turnId, res) {
+  const [turn] = await sql`
+    SELECT audio_data, mime_type, audio_file FROM turns WHERE id = ${turnId}
+  `;
+
+  if (!turn) {
+    sendJson(res, 404, { error: "Turn not found." });
+    return;
+  }
+
+  if (!turn.audio_data) {
+    sendJson(res, 404, { error: "No audio stored for this turn." });
+    return;
+  }
+
+  const ext = turn.mime_type?.includes("wav") ? "wav" : "webm";
+  const filename = turn.audio_file || `turn-${turnId}.${ext}`;
+  res.writeHead(200, {
+    "Content-Type": turn.mime_type || "audio/webm",
+    "Content-Disposition": `attachment; filename="${filename}"`,
+    "Content-Length": turn.audio_data.length
+  });
+  res.end(turn.audio_data);
+}
+
 // ─── Chat ─────────────────────────────────────────────────────
 async function handleChat(req, res) {
   if (!GROQ_API_KEY) {
@@ -140,6 +173,7 @@ async function handleChat(req, res) {
   }
 
   const now = new Date();
+  const tz = session.client_timezone ?? null;
   const askedAt = session.last_question_asked_at
     ? new Date(session.last_question_asked_at)
     : null;
@@ -161,23 +195,23 @@ async function handleChat(req, res) {
     await sql`
       UPDATE sessions SET
         turn_count             = ${turnNumber},
-        last_question_asked_at = ${replySentAt},
+        last_question_asked_at = ${localIso(replySentAt, tz)},
         last_question_text     = ${reply}
       WHERE id = ${sessionId}
     `;
 
     await sql`
       INSERT INTO turns (
-        session_id, user_id, username, turn_number,
+        session_id, user_id, username, day_number, turn_number,
         question_text, question_asked_at,
         response_received_at, response_latency_ms,
         recording_started_at, recording_duration_ms,
         transcript, reply,
         audio_file, audio_bytes, audio_data, mime_type
       ) VALUES (
-        ${sessionId}, ${session.user_id}, ${session.username}, ${turnNumber},
-        ${promptText}, ${askedAt?.toISOString() ?? null},
-        ${now.toISOString()}, ${responseLatencyMs},
+        ${sessionId}, ${session.user_id}, ${session.username}, ${session.day_number}, ${turnNumber},
+        ${promptText}, ${askedAt ? localIso(askedAt, tz) : null},
+        ${localIso(now, tz)}, ${responseLatencyMs},
         ${recordingStartedAt ?? null},
         ${recordingStartedAt
           ? now.getTime() - new Date(recordingStartedAt).getTime()
@@ -190,7 +224,7 @@ async function handleChat(req, res) {
     await logEvent("assistant_question_sent", sessionId, session.user_id, session.username, {
       turnNumber,
       questionText: reply,
-      askedAt: replySentAt.toISOString(),
+      askedAt: localIso(replySentAt, tz),
       sessionComplete: isFinalTurn
     });
 
@@ -205,14 +239,14 @@ async function handleChat(req, res) {
   } catch (error) {
     await sql`
       INSERT INTO turns (
-        session_id, user_id, username, turn_number,
+        session_id, user_id, username, day_number, turn_number,
         question_text, question_asked_at,
         response_received_at, response_latency_ms,
         recording_started_at,
         audio_file, audio_bytes, audio_data, mime_type,
         failed, error_message
       ) VALUES (
-        ${sessionId}, ${session.user_id}, ${session.username}, ${turnNumber},
+        ${sessionId}, ${session.user_id}, ${session.username}, ${session.day_number}, ${turnNumber},
         ${promptText}, ${askedAt?.toISOString() ?? null},
         ${now.toISOString()}, ${responseLatencyMs},
         ${recordingStartedAt ?? null},
@@ -352,7 +386,8 @@ async function handleSession(req, res) {
   }
 
   const sessionId = randomUUID();
-  const openedAt = new Date().toISOString();
+  const clientTz = body?.timezone ?? null;
+  const openedAt = localIso(new Date(), clientTz);
 
   const [{ count }] = await sql`
     SELECT COUNT(*)::int AS count FROM sessions WHERE user_id = ${userId}
@@ -360,10 +395,10 @@ async function handleSession(req, res) {
   const dayNumber = count + 1;
 
   await sql`
-    INSERT INTO sessions (id, user_id, username, user_agent, opened_at, day_number)
+    INSERT INTO sessions (id, user_id, username, user_agent, opened_at, day_number, client_timezone)
     VALUES (
       ${sessionId}, ${userId}, ${username},
-      ${body?.userAgent ?? null}, ${openedAt}, ${dayNumber}
+      ${body?.userAgent ?? null}, ${openedAt}, ${dayNumber}, ${clientTz}
     )
   `;
 
@@ -448,7 +483,7 @@ async function handleSessionStart(req, res) {
     return;
   }
 
-  const askedAt = new Date().toISOString();
+  const askedAt = localIso(new Date(), session.client_timezone ?? null);
 
   await sql`
     UPDATE sessions SET
@@ -563,6 +598,23 @@ async function logEvent(type, sessionId, userId, username, payload) {
       ${sql.json(payload)}
     )
   `;
+}
+
+function localIso(date, timezone) {
+  if (!timezone) return date.toISOString();
+  try {
+    // Format as "YYYY-MM-DDTHH:mm:ss" in the given timezone, then append offset
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezone,
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit",
+      hour12: false
+    }).formatToParts(date);
+    const get = (type) => parts.find(p => p.type === type)?.value ?? "00";
+    return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}:${get("second")}`;
+  } catch {
+    return date.toISOString();
+  }
 }
 
 function normalizeUsername(username) {
