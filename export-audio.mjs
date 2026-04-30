@@ -1,9 +1,25 @@
 import postgres from "postgres";
 import { mkdir, writeFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
-import { spawn } from "node:child_process";
+import { spawn, execSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
+
+if (!process.env.DATABASE_URL) {
+  console.error("Error: DATABASE_URL environment variable is not set.");
+  console.error("Run with: DATABASE_URL=<your-db-url> node export-audio.mjs");
+  console.error("You can find DATABASE_URL in the .env file.");
+  process.exit(1);
+}
+
+let hasFfmpeg = false;
+try {
+  execSync("ffmpeg -version", { stdio: "pipe" });
+  hasFfmpeg = true;
+} catch {
+  console.warn("Warning: ffmpeg not found — exporting original audio files instead of MP3.");
+  console.warn("Install ffmpeg to get MP3 output: https://ffmpeg.org/download.html");
+}
 
 const sql = postgres(process.env.DATABASE_URL, { max: 1 });
 const OUT_DIR = join(process.cwd(), "data", "audio-export");
@@ -36,19 +52,24 @@ console.log(`Exporting ${turns.length} audio files to ${OUT_DIR} as MP3 ...`);
 for (const turn of turns) {
   const srcExt = turn.mime_type?.includes("wav") ? "wav" : "webm";
   const date = new Date(turn.recorded_at).toISOString().slice(0, 10);
-  const mp3Name = `${turn.username}_${date}_day${turn.day_number ?? "?"}_turn${String(turn.turn_number).padStart(2, "0")}.mp3`;
-  const mp3Path = join(OUT_DIR, mp3Name);
+  const base = `${turn.username}_${date}_day${turn.day_number ?? "?"}_turn${String(turn.turn_number).padStart(2, "0")}`;
 
-  // Write raw audio to a temp file, convert to mp3, then clean up
-  const tmpPath = join(tmpdir(), `${randomUUID()}.${srcExt}`);
-  await writeFile(tmpPath, turn.audio_data);
-  try {
-    await convertToMp3(tmpPath, mp3Path);
-    console.log(`  ${mp3Name}`);
-  } catch (err) {
-    console.error(`  FAILED ${mp3Name}: ${err.message}`);
-  } finally {
-    await unlink(tmpPath).catch(() => {});
+  if (hasFfmpeg) {
+    const mp3Path = join(OUT_DIR, `${base}.mp3`);
+    const tmpPath = join(tmpdir(), `${randomUUID()}.${srcExt}`);
+    await writeFile(tmpPath, turn.audio_data);
+    try {
+      await convertToMp3(tmpPath, mp3Path);
+      console.log(`  ${base}.mp3`);
+    } catch (err) {
+      console.error(`  FAILED ${base}.mp3: ${err.message}`);
+    } finally {
+      await unlink(tmpPath).catch(() => {});
+    }
+  } else {
+    const outPath = join(OUT_DIR, `${base}.${srcExt}`);
+    await writeFile(outPath, turn.audio_data);
+    console.log(`  ${base}.${srcExt}`);
   }
 }
 
