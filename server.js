@@ -38,9 +38,9 @@ Rules:
   1. If the user describes a morning moment or routine (woke up tired, skipped breakfast, went for a run, etc.), ask how that felt or what emotion it brought up.
   2. If the user names an emotion, ask which part of their morning it is connected to.
   3. If both the morning event and its emotion are clear, go deeper — ask what made that moment feel that way, or how it compares to how mornings usually feel for them.
+- Every reply must end with exactly one question — no exceptions.
 - Keep the entire reply under 120 words.
 - Sound warm, conversational, and grounded — like a thoughtful friend, not a therapist.
-- Never ask more than one question per turn.
 `.trim();
 
 const server = createServer(async (req, res) => {
@@ -187,7 +187,7 @@ async function handleChat(req, res) {
   const savedAudio = await saveAudioFile(sessionId, audioBuffer, mimeType, turnNumber);
 
   const elapsedMs = now.getTime() - new Date(session.opened_at).getTime();
-  const isFinalTurn = turnNumber >= 10 || elapsedMs >= 10 * 60 * 1000;
+  const isFinalTurn = (turnNumber >= 10 || elapsedMs >= 10 * 60 * 1000) && turnNumber >= 3;
 
   try {
     const transcript = await transcribeAudio(audio, mimeType);
