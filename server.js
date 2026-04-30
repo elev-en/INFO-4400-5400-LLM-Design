@@ -187,7 +187,7 @@ async function handleChat(req, res) {
   const savedAudio = await saveAudioFile(sessionId, audioBuffer, mimeType, turnNumber);
 
   const elapsedMs = now.getTime() - new Date(session.opened_at).getTime();
-  const isFinalTurn = (turnNumber >= 10 || elapsedMs >= 10 * 60 * 1000) && turnNumber >= 3;
+  const isFinalTurn = turnNumber >= 10 || elapsedMs >= 10 * 60 * 1000;
 
   try {
     const transcript = await transcribeAudio(audio, mimeType);
@@ -390,7 +390,7 @@ async function handleSession(req, res) {
 
   const sessionId = randomUUID();
   const clientTz = body?.timezone ?? null;
-  const openedAt = localIso(new Date(), clientTz);
+  const openedAt = new Date().toISOString(); // always UTC so elapsed time is accurate
 
   const [{ count }] = await sql`
     SELECT COUNT(*)::int AS count FROM sessions WHERE user_id = ${userId}
