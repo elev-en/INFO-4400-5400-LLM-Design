@@ -4,7 +4,7 @@ import { randomBytes, randomUUID, scryptSync } from "node:crypto";
 const sql = postgres(process.env.DATABASE_URL, { max: 1 });
 
 const USERNAME = "p-119";
-const PASSWORD = "test";
+const PASSWORD = USERNAME; // app sends username as password
 
 function hashPassword(password, salt) {
   return scryptSync(password, salt, 64).toString("hex");
