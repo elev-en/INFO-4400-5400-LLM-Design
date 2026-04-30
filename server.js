@@ -570,18 +570,21 @@ async function getPastMorningSummary(userId, currentSessionId) {
 }
 
 async function generateOpeningQuestion(pastContext) {
-  const prompt = `You are Morning Mirror, a warm voice-first check-in agent. Based on what this participant shared in their previous morning check-ins, write a single warm, personalized opening question for today's session.
+  const prompt = `You are Morning Mirror, a warm voice-first check-in agent. Read this participant's past morning check-in responses carefully, then write a single opening question for today.
 
 Past morning responses:
 ${pastContext}
 
-Rules:
-- Focus on an emotion the participant expressed before (stress, anxiety, relief, excitement, tiredness, etc.) and the event or situation tied to it — ask how they're feeling about it now
-- If there was an unresolved stressor or upcoming event mentioned, follow up on that specifically
-- Keep it under 25 words
-- Sound warm and conversational, like a thoughtful friend who remembers
-- End with a question mark
-- Only output the question itself, nothing else`;
+Step 1 — Identify the most significant emotional thread: look for emotions that recur across multiple days, an emotion tied to an ongoing or unresolved event, or a strong feeling the participant expressed that was never fully followed up on (e.g., persistent stress about work, anxiety about a relationship, exhaustion that keeps coming back). Prioritize patterns over one-off mentions.
+
+Step 2 — Write one opening question that:
+- Names or reflects the specific emotion you identified
+- References the event, situation, or pattern that caused it
+- Asks how that emotion or situation has evolved since they last shared it
+- Sounds like a warm friend checking in, not a therapist conducting an assessment
+- Is under 25 words and ends with a question mark
+
+Only output the question itself, nothing else.`;
 
   const response = await fetch(`${GROQ_BASE}/chat/completions`, {
     method: "POST",
