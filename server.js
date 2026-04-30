@@ -189,7 +189,8 @@ async function handleChat(req, res) {
 
   try {
     const transcript = await transcribeAudio(audio, mimeType);
-    const reply = await generateReply(messages, transcript, isFinalTurn);
+    const pastContext = await getPastMorningSummary(session.user_id, sessionId);
+    const reply = await generateReply(messages, transcript, isFinalTurn, pastContext);
     const replySentAt = new Date();
 
     await sql`
@@ -485,20 +486,31 @@ async function handleSessionStart(req, res) {
 
   const askedAt = localIso(new Date(), session.client_timezone ?? null);
 
+  const pastContext = await getPastMorningSummary(session.user_id, sessionId);
+  let chosenQuestion = openingQuestion;
+  if (pastContext) {
+    console.log("[session/start] past context found:\n", pastContext);
+    const personalized = await generateOpeningQuestion(pastContext);
+    console.log("[session/start] personalized question:", personalized);
+    if (personalized) chosenQuestion = personalized;
+  } else {
+    console.log("[session/start] no past data — using default opening question");
+  }
+
   await sql`
     UPDATE sessions SET
       last_question_asked_at = ${askedAt},
-      last_question_text     = ${openingQuestion}
+      last_question_text     = ${chosenQuestion}
     WHERE id = ${sessionId}
   `;
 
   await logEvent("assistant_question_sent", sessionId, session.user_id, session.username, {
     turnNumber: 0,
-    questionText: openingQuestion,
+    questionText: chosenQuestion,
     askedAt
   });
 
-  sendJson(res, 200, { openingQuestion, questionAskedAt: askedAt });
+  sendJson(res, 200, { openingQuestion: chosenQuestion, questionAskedAt: askedAt });
 }
 
 // ─── Groq helpers ────────────────────────────────────────────
@@ -524,10 +536,78 @@ async function transcribeAudio(base64Audio, mimeType) {
   return (await response.text()).trim();
 }
 
-async function generateReply(messages, transcript, isFinalTurn = false) {
-  const effectivePrompt = isFinalTurn
+// ─── Past morning context ─────────────────────────────────────
+async function getPastMorningSummary(userId, currentSessionId) {
+  const pastTurns = await sql`
+    SELECT s.day_number, t.turn_number, t.transcript
+    FROM turns t
+    JOIN sessions s ON t.session_id = s.id
+    WHERE t.user_id = ${userId}
+      AND t.session_id != ${currentSessionId}
+      AND t.transcript IS NOT NULL
+      AND t.transcript != ''
+      AND t.failed = false
+    ORDER BY s.day_number DESC, t.turn_number ASC
+    LIMIT 30
+  `;
+
+  if (pastTurns.length === 0) return null;
+
+  const byDay = {};
+  for (const turn of pastTurns) {
+    const day = turn.day_number ?? "?";
+    if (!byDay[day]) byDay[day] = [];
+    byDay[day].push(turn.transcript);
+  }
+
+  const lines = Object.entries(byDay)
+    .sort(([a], [b]) => Number(b) - Number(a))
+    .slice(0, 5)
+    .map(([day, transcripts]) => `Day ${day}: ${transcripts.join(" | ")}`);
+
+  return lines.join("\n");
+}
+
+async function generateOpeningQuestion(pastContext) {
+  const prompt = `You are Morning Mirror, a warm voice-first check-in agent. Based on what this participant shared in their previous morning check-ins, write a single warm, personalized opening question for today's session.
+
+Past morning responses:
+${pastContext}
+
+Rules:
+- Reference something specific the participant mentioned before (a recurring theme, a goal, something they were working through)
+- Keep it under 25 words
+- Sound warm and conversational, like a thoughtful friend who remembers
+- End with a question mark
+- Only output the question itself, nothing else`;
+
+  const response = await fetch(`${GROQ_BASE}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${GROQ_API_KEY}`
+    },
+    body: JSON.stringify({
+      model: CHAT_MODEL,
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.9,
+      max_tokens: 64
+    })
+  });
+
+  if (!response.ok) return null;
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content?.trim() || null;
+}
+
+async function generateReply(messages, transcript, isFinalTurn = false, pastContext = null) {
+  let effectivePrompt = isFinalTurn
     ? systemPrompt + "\n\nThis is the final turn of the session. Do NOT ask a follow-up question. Instead, warmly wrap up the conversation in 1-2 sentences, thanking them for sharing and wishing them a good morning."
     : systemPrompt;
+
+  if (pastContext) {
+    effectivePrompt += `\n\nCONTEXT FROM THIS PARTICIPANT'S PAST MORNING CHECK-INS:\n${pastContext}\n\nUse this context to ask more personalized follow-up questions. Reference specific past details (routines, stressors, goals) when relevant, and avoid re-asking topics already thoroughly explored.`;
+  }
 
   const chatMessages = [
     { role: "system", content: effectivePrompt },
